@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "author": "zlipeng",
+  "date": "2026-05-26",
+  "abstract": "End-to-end workflow skill: generate a multi-phase plan, save it under plans/, execute each Phase with strict branch + commit gates, run a code-reviewer subagent between phases, and append a Test Cases section once all phases pass.",
+  "references": [
+    "https://www.skills.sh/docs",
+    "https://github.com/vercel-labs/agent-skills"
+  ]
+}
