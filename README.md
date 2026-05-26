@@ -1,0 +1,47 @@
+# agent-skills
+
+[![skills.sh](https://skills.sh/b/zlipeng/agent-skills)](https://skills.sh/zlipeng/agent-skills)
+
+Personal collection of [skills.sh](https://www.skills.sh/docs)-compatible agent skills, installable across Claude Code, Cursor, and any other agent that speaks the skills.sh protocol.
+
+## Available Skills
+
+| Skill | Trigger | Description |
+|---|---|---|
+| [`plan-execution-gate`](skills/plan-execution-gate/SKILL.md) | "生成方案并落地" / "执行 plan" / "写个 plan" / "review phase" | End-to-end workflow: generate a multi-phase plan, save it under `plans/`, execute phase-by-phase with subagent review gates, and append test cases on completion. |
+
+## Installation
+
+```bash
+npx skills add zlipeng/agent-skills
+```
+
+This pulls every skill in this repo into your local skills directory (e.g. `~/.claude/skills/` for Claude Code). Run the command again to update.
+
+To install a single skill only:
+
+```bash
+npx skills add zlipeng/agent-skills/plan-execution-gate
+```
+
+## Repository Layout
+
+```
+agent-skills/
+├── AGENTS.md           # Conventions for AI agents maintaining this repo
+├── CLAUDE.md           # Pointer for Claude Code → AGENTS.md
+├── README.md           # This file
+├── skills.sh.json      # Grouping + discovery metadata for skills.sh
+├── LICENSE             # MIT
+└── skills/
+    └── plan-execution-gate/
+        ├── SKILL.md
+        ├── metadata.json
+        └── references/
+```
+
+See [`AGENTS.md`](AGENTS.md) for the directory convention, SKILL.md template, and the workflow for adding new skills.
+
+## License
+
+[MIT](LICENSE) © 2026 zlipeng
