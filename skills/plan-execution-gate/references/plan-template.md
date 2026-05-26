@@ -1,108 +1,110 @@
-# Plan 模板
+# Plan template
 
-生成 Plan 文档时使用以下结构。编号从 `plans/` 目录最大编号 +1 开始。
+Use the structure below when generating a Plan document. Number the file from `max(existing plans/) + 1`.
+
+> **Language note**: this template is shown in English, but the actual plan document must be written in the language selected by the SKILL.md "Document language priority" rule — the user's explicit request first, the conversation language second, English only as the final fallback. Translate the section headings below into the chosen language when you generate the plan.
 
 ```markdown
-# Plan {编号} — {标题}
+# Plan {NNN} — {Title}
 
 > **Status**: Draft
 > **Owner**: TBD
 > **Created**: {YYYY-MM-DD}
-> **Depends on**: {外部依赖或前置 Plan，无则写"无"}
-> **Target area**: {涉及的主要目录/文件路径}
+> **Depends on**: {external dependency or prior plan; write "none" if there is none}
+> **Target area**: {primary directories or file paths involved}
 
-## 1. 背景
+## 1. Background
 
-### 1.1 问题描述
+### 1.1 Problem statement
 
-{用户痛点、业务需求、或技术债务的描述}
+{User pain point, business requirement, or technical debt being addressed.}
 
-### 1.2 现状审计
+### 1.2 Current-state audit
 
-{当前代码/架构的现状，可用表格对比"当前实现"vs"目标状态"}
+{Audit of the current code / architecture. A table comparing "current" vs "target" works well.}
 
-| 维度 | 当前实现 | 目标状态 |
+| Dimension | Current implementation | Target state |
 |---|---|---|
 | ... | ... | ... |
 
-### 1.3 设计目标
+### 1.3 Design goals
 
-{编号列出 3-5 条核心设计目标}
+{Numbered list of 3–5 core design goals.}
 
 ## 2. Goals
 
-{编号列出本次 Plan 要达成的具体成果，每条可验证}
+{Numbered list of the concrete outcomes this Plan must deliver. Each item should be verifiable.}
 
 ## 3. Non-Goals
 
-{明确列出不在本次范围内、但可能被误解为在范围内的内容}
+{Items that are explicitly out of scope but could otherwise be misread as in-scope.}
 
-## 4. 关键决策
+## 4. Key decisions
 
-### 4.1 {决策标题}
+### 4.1 {Decision title}
 
-{决策内容 + 决策理由 + 备选方案对比}
+{Decision content + rationale + comparison with alternatives.}
 
-## 5. 实施计划
+## 5. Implementation plan
 
-### Phase 1: {阶段名称}
+### Phase 1: {Phase name}
 
-**目标**: {Phase 要达成的效果，一句话}
+**Goal**: {One-sentence description of the effect this Phase produces.}
 
-**覆盖文件**:
+**Files covered**:
 - `path/to/file1.ts`
 - `path/to/file2.tsx`
 
-**任务**:
-- [ ] 任务 1 描述
-- [ ] 任务 2 描述
-- [ ] 任务 3 描述
+**Tasks**:
+- [ ] Task 1 description
+- [ ] Task 2 description
+- [ ] Task 3 description
 
 **Acceptance Criteria**:
-1. {可验证的完成标准 1}
-2. {可验证的完成标准 2}
+1. {Verifiable completion criterion 1}
+2. {Verifiable completion criterion 2}
 
-<!-- 执行完成后回填：
-**Reviewed**: <日期> by code-reviewer
-**Commit**: <commit hash> <commit message 标题>
+<!-- Backfill after execution:
+**Reviewed**: <date> by code-reviewer
+**Commit**: <commit hash> <commit message subject>
 -->
 
 ---
 
-### Phase 2: {阶段名称}
+### Phase 2: {Phase name}
 
-{同上结构}
+{Same structure as above.}
 
-## 6. 风险与缓解
+## 6. Risks and mitigations
 
-| 风险 | 影响 | 缓解措施 |
+| Risk | Impact | Mitigation |
 |---|---|---|
 | ... | ... | ... |
 ```
 
-## Test Cases 模板
+## Test Cases template
 
-Plan 全部 Phase 完成且 review 通过后，在文档末尾追加：
+Once every Phase is complete and review has passed, append the following section to the end of the plan document:
 
 ```markdown
 ## Test Cases
 
-### TC-001: {用例标题}
+### TC-001: {Case title}
 
-- **前置**: {环境 / 数据 / 入口状态}
-- **步骤**:
-  1. {具体操作，点击/输入/命令}
-  2. {具体操作}
-  3. {具体操作}
-- **路径**: `packages/.../foo.ts:L12`, `packages/renderer/src/pages/Bar.tsx`
-- **预期**: {可观测的 UI、日志、DB 状态、事件}
+- **Preconditions**: {environment / data / entry state}
+- **Steps**:
+  1. {Concrete operation — click / input / command}
+  2. {Concrete operation}
+  3. {Concrete operation}
+- **Paths**: `packages/.../foo.ts:L12`, `packages/renderer/src/pages/Bar.tsx`
+- **Expected**: {observable UI, log line, DB state, or event}
 
-### TC-002: {用例标题}
+### TC-002: {Case title}
 
-- **前置**: ...
-- **步骤**:
+- **Preconditions**: ...
+- **Steps**:
   1. ...
   2. ...
-- **路径**: ...
-- **预期**: ...
+- **Paths**: ...
+- **Expected**: ...
 ```

@@ -1,8 +1,8 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "zlipeng",
   "date": "2026-05-26",
-  "abstract": "End-to-end workflow skill: generate a multi-phase plan, save it under plans/, execute each Phase with strict branch + commit gates, run a code-reviewer subagent between phases, and append a Test Cases section once all phases pass.",
+  "abstract": "End-to-end workflow skill: generate a multi-phase plan, save it under plans/, execute each Phase with strict branch + commit gates, run a code-reviewer subagent between phases, and append a Test Cases section once all phases pass. Plan documents follow a language-priority rule: explicit user request > conversation language > English fallback.",
   "references": [
     "https://www.skills.sh/docs",
     "https://github.com/vercel-labs/agent-skills"

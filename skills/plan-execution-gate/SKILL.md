@@ -1,126 +1,140 @@
 ---
 name: plan-execution-gate
 description: |
-  Plan 生成、落地执行与 Phase-by-Phase Review 的完整工作流。
-  TRIGGER when: (1) 用户要求生成方案/计划/plan 并保存到 plans/ 目录；(2) 用户要求执行 plans/ 下的多阶段计划；(3) 对话中出现"生成方案并落地"、"写个 plan"、"执行 plan"等意图；(4) 需要对已完成的 Phase 进行 review 或补充 Test Cases。
-  DO NOT TRIGGER when: 用户只是讨论方案思路、不需要落地保存、或任务仅涉及单步操作。
+  End-to-end workflow for generating, persisting, and executing multi-phase plans with strict Phase-by-Phase review gates.
+  TRIGGER when: (1) user asks to generate a plan / spec / proposal and save it under `plans/`; (2) user asks to execute a multi-phase plan from `plans/`; (3) the conversation contains intents like "generate a plan and land it", "write a plan", "execute the plan", "review the phase", "生成方案并落地", "写个 plan", "执行 plan", "review 一下 phase"; (4) user wants to review a completed Phase or append a Test Cases section.
+  DO NOT TRIGGER when: the user is only brainstorming, does not need persistence, or the task is a single-step operation.
 ---
 
 # Plan Execution Gate
 
-方案生成 → 落地保存 → Phase-by-Phase 执行 → Review → Test Cases 的完整闭环。
+A complete loop: plan generation → persistence → phase-by-phase execution → review → test cases.
 
-## 1. Plan 生成与保存
+## 1. Plan Generation and Persistence
 
-当用户要求生成方案并落地时：
+When the user asks to generate a plan and land it:
 
-1. 探索相关代码，理解现状
-2. 与用户对齐需求和边界
-3. 按 [Plan 模板](references/plan-template.md) 生成完整 Plan 文档
-4. 扫描 `plans/` 目录，取最大编号 +1（如最大 `016-xxx.md`，新文件为 `017-xxx.md`）
-5. 文件命名：`{编号}-{kebab-case-标题}.md`
-6. 使用 Write 工具保存到 `plans/` 目录
-7. 向用户确认保存路径
+1. Explore the relevant code to understand the current state.
+2. Align with the user on requirements and boundaries.
+3. Use the [plan template](references/plan-template.md) to draft a complete plan document.
+4. Scan the `plans/` directory, take the largest existing number `+1` (e.g. if the largest is `016-xxx.md`, the new file becomes `017-xxx.md`).
+5. File name format: `{NNN}-{kebab-case-title}.md`.
+6. Save it under `plans/` using the Write tool.
+7. Confirm the saved path with the user.
 
-Plan 文档必须包含：背景与现状分析、Goals / Non-Goals、关键决策（含理由）、按 Phase 划分的实施步骤（每个 Phase 包含 checklist `[ ]`）、每个 Phase 的 Acceptance Criteria、依赖关系。
+The plan document MUST contain: background and current-state analysis, Goals / Non-Goals, key decisions (with rationale), phase-by-phase implementation steps (each Phase contains a `[ ]` checklist), Acceptance Criteria for each Phase, and dependency notes.
 
-## 2. Branch Gate（开始执行前先建分支）
+### Document language priority
 
-**开始执行任何 Plan 前（Phase 1 第一个 commit 之前），必须先基于主分支创建专用 feature 分支**。禁止把 Phase commits 直接推到 `dev` / `main`。
+The generated plan document's natural language MUST be selected in this order:
 
-### 强制流程
+1. **Explicit user request** — if the user states a language for the document itself (e.g. "write the plan in Chinese", "用英文写这份 plan", "draft it in Japanese"), use that language.
+2. **Conversation language** — otherwise, match the dominant natural language the user has been using in the current conversation. If the user has been writing in Chinese, the plan document is written in Chinese; if in Japanese, the plan is in Japanese; and so on.
+3. **English fallback** — only when neither of the above gives a clear signal (e.g. mixed-language conversation with no preference stated, or a brand-new session with no user message yet), default to English.
 
-1. **确认当前分支**：执行任何 Phase 改动前先 `git branch --show-current` 与 `git status`。
-2. **基于主分支建分支**：
-   - 命名约定：先 `git branch -a | head -20` 观察当前仓库的 feature 分支命名习惯（前缀如 `feat/` / `feature/` / `plan-` 等，是否带编号），沿用该习惯；若仓库无明显约定，默认 `feat/plan-<NNN>-<short-kebab>`。
-   - 命令：`git checkout <base-branch> && git pull --ff-only && git checkout -b <new-branch>`，其中 `<base-branch>` 以仓库实际主开发分支为准（常见 `main` / `master` / `dev` / `develop`）。
-3. **首个 Phase commit 必须落在该分支上**。后续所有 Phase commit、Test Cases 文档补充、commit hash 回填都在该分支。
-4. **不要主动 push 或开 PR**：分支推送与 PR 由用户决定时机，除非用户明确指示。
-5. **不要切回 dev/main 做 plan 相关改动**。
+Once the language is chosen, apply it consistently across the entire plan document — section headings, task descriptions, acceptance criteria, risk table, and review/commit annotations. Do not silently mix languages mid-document. The only exceptions are: code blocks, file paths, command snippets, identifiers, and proper nouns that have no natural translation.
 
-### 误提交主分支的恢复流程
+## 2. Branch Gate (create a feature branch before execution)
 
-若 Phase commit 已经误落到主分支（`main` / `master` / `dev` 等）：
+**Before executing any Plan (before the first Phase 1 commit), you MUST create a dedicated feature branch off the main development branch.** Pushing Phase commits directly to `dev` / `main` is forbidden.
 
-1. **不要**在主分支上直接 `git reset --hard`（破坏性且容易丢失现场）。
-2. 在当前 HEAD 处建新分支保住所有 commit：`git checkout -b <new-feature-branch>`。
-3. 把主分支指针回退到 origin：`git branch -f <base-branch> origin/<base-branch>`（此时已在 feature 分支，安全；不影响工作树）。
-4. 验证：`git log --oneline <base-branch> -1` 应等于 `origin/<base-branch>`，`git log --oneline <new-feature-branch> -1` 仍指向最后一个 Phase commit。
+### Required flow
 
-### 豁免条件
+1. **Verify the current branch** — before any Phase edit, run `git branch --show-current` and `git status`.
+2. **Branch off the main development branch**:
+   - Naming convention: first run `git branch -a | head -20` to observe the repository's existing feature-branch naming style (prefix such as `feat/` / `feature/` / `plan-` etc., whether it carries a number) and follow it. If the repo has no clear convention, default to `feat/plan-<NNN>-<short-kebab>`.
+   - Command: `git checkout <base-branch> && git pull --ff-only && git checkout -b <new-branch>`, where `<base-branch>` is the repo's actual main development branch (commonly `main` / `master` / `dev` / `develop`).
+3. **The first Phase commit MUST land on this new branch.** All subsequent Phase commits, Test Cases additions, and commit-hash backfills happen on the same branch.
+4. **Do NOT push or open a PR on your own initiative** — branch push and PR timing are decided by the user, unless the user explicitly tells you otherwise.
+5. **Do NOT switch back to `dev` / `main` to make plan-related changes.**
 
-- Plan 明确声明仅为文档调整（无代码变更）且只有一个 Phase 时，可直接在主分支上提交一个 commit。
-- 用户在对话中显式要求"直接提交到主分支"。
+### Recovery when a Phase commit lands on the main branch by mistake
 
-## 3. Plan Execution Gate（Phase-by-Phase Review）
+If a Phase commit has already been committed directly to a main branch (`main` / `master` / `dev` etc.):
 
-执行 `plans/` 下多阶段计划时，**每完成一个 Phase 必须启动 subagent 执行独立 review，review 通过后方可进入下一个 Phase**。
+1. **Do NOT** run `git reset --hard` directly on the main branch (destructive and easy to lose work in progress).
+2. Create a new branch at the current HEAD to preserve all commits: `git checkout -b <new-feature-branch>`.
+3. Move the main-branch pointer back to origin: `git branch -f <base-branch> origin/<base-branch>` (you are already on the feature branch, so this is safe and does not touch the working tree).
+4. Verify: `git log --oneline <base-branch> -1` should equal `origin/<base-branch>`, and `git log --oneline <new-feature-branch> -1` should still point to the latest Phase commit.
 
-### 强制流程
+### Exemptions
 
-1. **完成 Phase 内所有任务** — 该 Phase 下的 `[ ]` 复选框全部勾选，项目的类型检查 / lint / 编译等静态门禁命令（如有）全部通过
-2. **跑受影响范围的测试套件（如存在）** — 识别 Phase 触及的代码所属测试（单测、集成测试、组件测试均可），用项目自身的测试命令执行；存在 monorepo 过滤、tag 过滤、路径过滤等机制时，**只跑相关子集即可，不强求全量**。这一步抓"代码改完类型也对，但运行时/渲染/单测假设被打破"的回归（典型例子：文案迁移导致测试断言里的硬编码失配、组件新增 Provider 依赖未被测试 wrapper 覆盖）。如果项目没有测试框架或当前 Phase 涉及的范围没有任何已有测试，可直接跳过本步。测试失败 → 修复后再启动 review，禁止跳过。
-3. **启动 review subagent** — 使用 `Agent` 工具（`subagent_type: "code-reviewer"`）传入：
-   - 当前 Phase 编号与覆盖范围（文件路径清单）
-   - 对应计划文档路径（e.g. `plans/xxx-plan.md`）
-   - 该 Phase 的完成标准（Acceptance Criteria）
-   - 明确要求：**逐条核对 checklist 是否真实落地**，而不是仅看接口存在
-   - 明确要求：**核对受影响范围的测试是否仍然通过**，并把执行的测试命令/结果写进 review 输出
-4. **处理 review 结论**：
-   - 全部通过 → 在计划文档中把该 Phase 所有任务标记为 `[x]`，并追加一行 `**Reviewed**: <日期> by code-reviewer`
-   - 有未落实项 → 留在当前 Phase 继续修复，**禁止**进入下一个 Phase
-5. **Phase Commit Gate（强制提交）** — review 通过、计划文档勾选已更新后，**必须先创建一个独立的 git commit，再开始下一个 Phase**：
-   - 范围：仅包含该 Phase 实际改动的文件（含 plan 文档的勾选更新）；如有遗漏的无关脏文件，先与用户确认而不是混入提交
-   - 项目的静态门禁命令（类型检查 / lint / 编译）必须通过；禁止跳过 commit hook（如 `--no-verify`、`--no-gpg-sign` 等）
-   - Commit message 必须能定位到 Plan 与 Phase，推荐格式：
-     - 标题：`<type>(plan-<编号>): phase <n> - <Phase 名称>`（type 用 `feat` / `refactor` / `fix` 等，单行 ≤ 72 字符）
-     - Body：列出本 Phase 完成的 checklist 要点 + `Reviewed by code-reviewer on <日期>`
-   - 创建 commit 后再读取 `git status` / `git log -1` 确认成功，然后进入下一个 Phase
-   - **禁止**：把多个 Phase 合并到一个 commit；review 未通过就提交；提交后再补改 Phase 内容（如需修补，新建后续 commit 并在 plan 文档说明）
-6. **跨 Phase 禁止并行** — 除非两 Phase 在计划中明确标注无依赖，否则严格串行
+- When the Plan explicitly declares it is a documentation-only change (no code changes) and has only one Phase, a single commit directly on the main branch is allowed.
+- The user explicitly instructs you in the conversation to "commit directly to the main branch".
 
-### Review subagent prompt 模板
+## 3. Plan Execution Gate (Phase-by-Phase Review)
+
+When executing a multi-phase plan under `plans/`, **after every Phase completion you MUST spawn a subagent to run an independent review; only after that review passes may you move on to the next Phase.**
+
+### Required flow
+
+1. **Complete every task inside the Phase** — every `[ ]` checkbox under the Phase is ticked, and the project's static gates (type-check / lint / build, if any) all pass.
+2. **Run the impacted test suite (if it exists)** — identify the tests covering the code this Phase touched (unit, integration, or component tests), and run them with the project's own test command. When the project supports monorepo filters, tag filters, path filters, etc., **run only the relevant subset; full-suite runs are not required**. This step catches regressions of the form "code change type-checks but a runtime / rendering / unit-test assumption is broken" (typical example: a copy migration breaks a hard-coded assertion; a new Provider dependency in a component is not covered by the test wrapper). If the project has no test framework or the area touched by the current Phase has no existing tests, skip this step. If tests fail, fix them and re-run the review — skipping is forbidden.
+3. **Spawn the review subagent** — use the `Agent` tool (`subagent_type: "code-reviewer"`) and pass:
+   - The current Phase number and the file paths it covers
+   - The corresponding plan document path (e.g. `plans/xxx-plan.md`)
+   - The Phase's Acceptance Criteria
+   - An explicit requirement: **verify each checklist item is actually implemented**, not merely that an interface exists.
+   - An explicit requirement: **verify impacted tests still pass**, and write the executed test commands / results into the review output.
+4. **Act on the review verdict**:
+   - All pass → mark every task in this Phase as `[x]` in the plan document and append a line `**Reviewed**: <date> by code-reviewer`.
+   - Anything outstanding → stay in the current Phase and fix it. **Do NOT** proceed to the next Phase.
+5. **Phase Commit Gate (mandatory commit)** — once the review passes and the plan document's checkboxes are updated, **you MUST create a single dedicated git commit before starting the next Phase**:
+   - Scope: include only the files this Phase actually changed (including the plan document's checkbox/Reviewed update). If unrelated dirty files exist, confirm with the user instead of mixing them in.
+   - The project's static gates (type-check / lint / build) must pass; **never** skip commit hooks (no `--no-verify`, no `--no-gpg-sign`, etc.).
+   - The commit message must point back to the Plan and Phase. Recommended format:
+     - Subject: `<type>(plan-<NNN>): phase <n> - <Phase name>` (`type` is `feat` / `refactor` / `fix` etc., subject line ≤ 72 characters).
+     - Body: list the checklist items completed in this Phase + a line `Reviewed by code-reviewer on <date>`.
+   - After creating the commit, run `git status` / `git log -1` to confirm success, then move to the next Phase.
+   - **Forbidden**: bundling multiple Phases into one commit; committing while review has not passed; modifying Phase content after the commit (if a fix is needed, create a new follow-up commit and note it in the plan document).
+6. **No parallel work across Phases** — unless the plan explicitly marks two Phases as dependency-free, run them strictly sequentially.
+
+### Review subagent prompt template
 
 ```
-审查 {plan_path} 的 Phase {n} 实现。
+Review the implementation of Phase {n} in {plan_path}.
 
-覆盖文件：{file_list}
+Files covered: {file_list}
 
-要求：
-- 不要信任任务描述，只看代码实现
-- 核对每一项 checklist：被删的是否真删了，被新增的是否真接入了默认路径
-- 发现文档/类型/骨架类"完成"但运行路径未接通 → 必须标记未通过
-- 逐条核对 Acceptance Criteria 是否真实落地
-- 跑受影响范围的测试：先查清项目用的测试运行器与过滤方式（package.json scripts / Makefile / pyproject.toml / Cargo.toml / go test 等），用项目原生命令只跑覆盖文件相关的测试子集，并把结果写进报告；测试失败一律 FAIL。若该范围确无任何已有测试，明示"无受影响测试"即可。
+Requirements:
+- Do not trust the task description; read the actual code.
+- Verify every checklist item: items declared as deleted must be actually gone; items declared as added must be wired into the default path.
+- If something looks "done" only as docs / type / scaffolding while the runtime path is still disconnected, you MUST mark it failed.
+- Verify each Acceptance Criterion is genuinely satisfied.
+- Run impacted tests: first identify the project's test runner and filtering mechanism (package.json scripts / Makefile / pyproject.toml / Cargo.toml / `go test` ...), use the project-native command to run only the test subset relevant to the touched files, and record the result in the report. Any test failure → FAIL. If the touched area has no existing tests, explicitly state "no impacted tests".
 
-输出格式：
+Output format:
 - PASS / FAIL
-- 每条 checklist 的验证结果（✅/❌ + 依据）
-- 实际执行的测试命令 + 通过/失败摘要（或"无受影响测试"）
-- 如有 FAIL，列出具体问题和修复建议
+- Per-checklist verification result (✅/❌ + evidence)
+- Actual test commands executed + pass/fail summary (or "no impacted tests")
+- If FAIL, list concrete problems and suggested fixes.
 ```
 
-### 豁免条件
+### Exemptions
 
-仅文档调整或单任务的 Plan（只有一个 Phase）不强制走此流程。
+A plan that is documentation-only or contains a single task (only one Phase) is not required to go through this gate.
 
 ## 4. Plan Completion Test Cases
 
-当 Plan 全部 Phase 完成且 review 通过后，**必须在 Plan 文档末尾追加 `## Test Cases` 章节**。
+Once every Phase of the Plan is complete and review has passed, **you MUST append a `## Test Cases` section to the end of the plan document.**
 
-### 强制要求
+### Requirements
 
-1. **位置**：追加在 Plan 文档最底部，紧跟最后一个 Phase 的 `**Reviewed**` 标记之后
-2. **覆盖范围**：Plan 中声明的每一条 Acceptance Criteria 至少对应一条用例；关键交互/边界场景单独列出
-3. **每条用例必须包含**：
-   - **用例标题**（简短描述验证点）
-   - **前置条件**（环境、数据、入口状态）
-   - **操作步骤**（编号 1/2/3...，每步具体到点击/输入/命令）
-   - **涉及路径**（相关源文件路径 + 行号，格式 `path/to/file.ts:42`；UI 用例标注页面路由 / 组件路径）
-   - **预期结果**（可观测的 UI、日志、DB 状态、事件）
-4. **用例模板**见 [Plan 模板 - Test Cases 章节](references/plan-template.md)
-5. **禁止**：笼统描述如"验证功能正常"；没有路径引用；没有可执行操作步骤
+1. **Location**: append at the very bottom of the plan document, right after the last Phase's `**Reviewed**` annotation.
+2. **Coverage**: every Acceptance Criterion declared in the Plan must have at least one matching test case; key interactions and boundary scenarios get their own cases.
+3. **Each test case MUST contain**:
+   - **Title** (a short description of what is verified)
+   - **Preconditions** (environment, data, entry state)
+   - **Steps** (numbered 1/2/3..., each step concrete to a click / input / command)
+   - **Paths involved** (source-file path + line number, format `path/to/file.ts:42`; for UI cases include the page route / component path)
+   - **Expected result** (observable UI, log line, DB state, or event)
+4. **Use the template** in [Plan template - Test Cases section](references/plan-template.md).
+5. **Forbidden**: vague descriptions like "verify the feature works"; missing path references; no executable steps.
 
-### 豁免条件
+### Language
 
-仅文档类 Plan（不产生代码变更）不需要补充测试用例。
+The `## Test Cases` section MUST use the same natural language as the rest of the plan document (per the document language priority defined in §1). Do not switch languages between the body of the plan and its test cases.
+
+### Exemptions
+
+Documentation-only plans (no code changes) do not need test cases.
