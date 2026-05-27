@@ -64,51 +64,47 @@ If a Phase commit has already been committed directly to a main branch (`main` /
 
 ## 3. Plan Execution Gate (Phase-by-Phase Review)
 
-When executing a multi-phase plan under `plans/`, **after every Phase completion you MUST spawn a subagent to run an independent review; only after that review passes may you move on to the next Phase.**
+When executing a multi-phase plan under `plans/`, **after every Phase completion you MUST run an independent review pass; only after that review passes may you move on to the next Phase.**
+
+"Independent review pass" means: the reviewer evaluates the Phase using the persona and checklist in [`references/reviewer-prompt.md`](references/reviewer-prompt.md), without being anchored to the implementer's reasoning. How that isolation is achieved depends on the host agent runtime — see [Agent runtime adapters](#agent-runtime-adapters) below.
 
 ### Required flow
 
 1. **Complete every task inside the Phase** — every `[ ]` checkbox under the Phase is ticked, and the project's static gates (type-check / lint / build, if any) all pass.
 2. **Run the impacted test suite (if it exists)** — identify the tests covering the code this Phase touched (unit, integration, or component tests), and run them with the project's own test command. When the project supports monorepo filters, tag filters, path filters, etc., **run only the relevant subset; full-suite runs are not required**. This step catches regressions of the form "code change type-checks but a runtime / rendering / unit-test assumption is broken" (typical example: a copy migration breaks a hard-coded assertion; a new Provider dependency in a component is not covered by the test wrapper). If the project has no test framework or the area touched by the current Phase has no existing tests, skip this step. If tests fail, fix them and re-run the review — skipping is forbidden.
-3. **Spawn the review subagent** — use the `Agent` tool (`subagent_type: "code-reviewer"`) and pass:
-   - The current Phase number and the file paths it covers
-   - The corresponding plan document path (e.g. `plans/xxx-plan.md`)
-   - The Phase's Acceptance Criteria
-   - An explicit requirement: **verify each checklist item is actually implemented**, not merely that an interface exists.
-   - An explicit requirement: **verify impacted tests still pass**, and write the executed test commands / results into the review output.
+3. **Run the review pass** — load [`references/reviewer-prompt.md`](references/reviewer-prompt.md) in full and fill the Part 2 template with:
+   - `{n}` — the current Phase number
+   - `{plan_path}` — the plan document path (e.g. `plans/017-foo.md`)
+   - `{file_list}` — every file path this Phase touched
+   - `{acceptance_criteria}` — the Phase's Acceptance Criteria, verbatim
+
+   Then execute the review using the runtime-specific mechanism from [Agent runtime adapters](#agent-runtime-adapters). The reviewer prompt itself is identical across runtimes; only the *invocation mechanism* changes.
 4. **Act on the review verdict**:
-   - All pass → mark every task in this Phase as `[x]` in the plan document and append a line `**Reviewed**: <date> by code-reviewer`.
-   - Anything outstanding → stay in the current Phase and fix it. **Do NOT** proceed to the next Phase.
+   - PASS → mark every task in this Phase as `[x]` in the plan document and append a line `**Reviewed**: <date> by reviewer`.
+   - FAIL → stay in the current Phase and fix the listed problems. **Do NOT** proceed to the next Phase. Re-run the review pass after fixes.
 5. **Phase Commit Gate (mandatory commit)** — once the review passes and the plan document's checkboxes are updated, **you MUST create a single dedicated git commit before starting the next Phase**:
    - Scope: include only the files this Phase actually changed (including the plan document's checkbox/Reviewed update). If unrelated dirty files exist, confirm with the user instead of mixing them in.
    - The project's static gates (type-check / lint / build) must pass; **never** skip commit hooks (no `--no-verify`, no `--no-gpg-sign`, etc.).
    - The commit message must point back to the Plan and Phase. Recommended format:
      - Subject: `<type>(plan-<NNN>): phase <n> - <Phase name>` (`type` is `feat` / `refactor` / `fix` etc., subject line ≤ 72 characters).
-     - Body: list the checklist items completed in this Phase + a line `Reviewed by code-reviewer on <date>`.
+     - Body: list the checklist items completed in this Phase + a line `Reviewed on <date>`.
    - After creating the commit, run `git status` / `git log -1` to confirm success, then move to the next Phase.
    - **Forbidden**: bundling multiple Phases into one commit; committing while review has not passed; modifying Phase content after the commit (if a fix is needed, create a new follow-up commit and note it in the plan document).
 6. **No parallel work across Phases** — unless the plan explicitly marks two Phases as dependency-free, run them strictly sequentially.
 
-### Review subagent prompt template
+### Agent runtime adapters
 
-```
-Review the implementation of Phase {n} in {plan_path}.
+The review pass needs *fresh context* and *reviewer persona* — nothing more. Pick the mechanism that fits your runtime:
 
-Files covered: {file_list}
+- **Claude Code** — call the `Agent` tool. Prefer `subagent_type: "code-reviewer"` if the user has that subagent installed; otherwise fall back to `subagent_type: "general-purpose"`. Pass the filled Part 2 template as the `prompt`, and prepend the Part 1 persona so the subagent operates with the right identity regardless of which `subagent_type` was selected.
+- **Codex CLI (or any agent with a subprocess "fresh session" primitive)** — spawn a new session via the runtime's exec / subprocess command, piping the full filled `reviewer-prompt.md` (Part 1 + Part 2) as the initial message. Capture the new session's output as the review report.
+- **Generic / no sub-agent primitive available** — perform an *inline* review pass within the same agent, but with explicit role switching:
+  1. Output a hard divider (e.g. `--- REVIEW PASS ---`) so the boundary is visible.
+  2. Load the full `reviewer-prompt.md` and restate the persona before evaluating.
+  3. Do NOT reference the implementation reasoning, partial diffs, or hypothesis from earlier in the session — re-read the files from disk.
+  4. Emit the review report in the exact output format defined by Part 2.
 
-Requirements:
-- Do not trust the task description; read the actual code.
-- Verify every checklist item: items declared as deleted must be actually gone; items declared as added must be wired into the default path.
-- If something looks "done" only as docs / type / scaffolding while the runtime path is still disconnected, you MUST mark it failed.
-- Verify each Acceptance Criterion is genuinely satisfied.
-- Run impacted tests: first identify the project's test runner and filtering mechanism (package.json scripts / Makefile / pyproject.toml / Cargo.toml / `go test` ...), use the project-native command to run only the test subset relevant to the touched files, and record the result in the report. Any test failure → FAIL. If the touched area has no existing tests, explicitly state "no impacted tests".
-
-Output format:
-- PASS / FAIL
-- Per-checklist verification result (✅/❌ + evidence)
-- Actual test commands executed + pass/fail summary (or "no impacted tests")
-- If FAIL, list concrete problems and suggested fixes.
-```
+In all three modes, the report MUST follow the output format in Part 2 of `reviewer-prompt.md`. The review verdict is the *report*, not the host agent's summary of it.
 
 ### Exemptions
 

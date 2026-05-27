@@ -65,7 +65,7 @@ Use the structure below when generating a Plan document. Number the file from `m
 2. {Verifiable completion criterion 2}
 
 <!-- Backfill after execution:
-**Reviewed**: <date> by code-reviewer
+**Reviewed**: <date> by reviewer
 **Commit**: <commit hash> <commit message subject>
 -->
 

@@ -4,9 +4,13 @@ A workflow skill that turns ad-hoc "let's plan this out" requests into a discipl
 
 1. **Generate** a multi-phase plan document under `plans/NNN-<kebab-title>.md`.
 2. **Branch** off the project's main development branch before any Phase commit.
-3. **Execute** each Phase, run scoped tests, then spawn a `code-reviewer` subagent to verify the checklist actually landed.
+3. **Execute** each Phase, run scoped tests, then run an independent review pass (using the bundled reviewer prompt) to verify the checklist actually landed.
 4. **Commit** per Phase with a `<type>(plan-NNN): phase <n> - <name>` message — no batching, no skipping the hook.
 5. **Finalize** by appending a `## Test Cases` section that maps every Acceptance Criterion to a runnable case.
+
+## Runtime-agnostic
+
+The review pass is described as a *capability* (fresh context + reviewer persona), not as a specific tool. The skill ships its own reviewer prompt in [`references/reviewer-prompt.md`](references/reviewer-prompt.md) and provides adapters for Claude Code (`Agent` tool), Codex CLI (subprocess session), and generic agents (inline role switch). See `SKILL.md` § "Agent runtime adapters".
 
 ## When it triggers
 
@@ -21,7 +25,7 @@ User: 帮我设计一下消息中心的重构方案，并落地。
 → Skill generates plans/NNN-message-center-refactor.md with Goals/Non-Goals/Phases/AC.
 → User says "开始执行".
 → Skill creates feat/plan-NNN-message-center branch, executes Phase 1, runs scoped tests,
-  spawns code-reviewer, commits, then asks before starting Phase 2.
+  runs an independent review pass, commits, then asks before starting Phase 2.
 ```
 
 ## Where it does NOT trigger
@@ -30,4 +34,4 @@ User: 帮我设计一下消息中心的重构方案，并落地。
 - Single-step tasks (one command, one file edit).
 - Discussions about an existing plan that don't ask for execution or review.
 
-See [`SKILL.md`](SKILL.md) for the full protocol, branch gate recovery flow, review subagent prompt template, and Test Cases requirements.
+See [`SKILL.md`](SKILL.md) for the full protocol, branch gate recovery flow, reviewer-prompt invocation, runtime adapters, and Test Cases requirements.
