@@ -94,10 +94,10 @@ When executing a multi-phase plan under `plans/`, **after every Phase completion
 
 ### Agent runtime adapters
 
-The review pass needs *fresh context* and *reviewer persona* — nothing more. Pick the mechanism that fits your runtime:
+The review pass needs *fresh context* and *reviewer persona* — nothing more. Pick the mechanism that fits your runtime. **Always prefer the runtime's native review command over a generic sub-agent when one is available:**
 
-- **Claude Code** — call the `Agent` tool. Prefer `subagent_type: "code-reviewer"` if the user has that subagent installed; otherwise fall back to `subagent_type: "general-purpose"`. Pass the filled Part 2 template as the `prompt`, and prepend the Part 1 persona so the subagent operates with the right identity regardless of which `subagent_type` was selected.
-- **Codex CLI (or any agent with a subprocess "fresh session" primitive)** — spawn a new session via the runtime's exec / subprocess command, piping the full filled `reviewer-prompt.md` (Part 1 + Part 2) as the initial message. Capture the new session's output as the review report.
+- **Claude Code** — invoke the `/code-review` skill first. Pass the file list and plan context so the review targets the exact Phase diff. If `/code-review` is not available or fails, fall back to the `Agent` tool with `subagent_type: "code-reviewer"` (or `"general-purpose"`), passing the filled Part 2 template as the `prompt` with the Part 1 persona prepended.
+- **Codex CLI** — run the native `/review` command first, piping the Phase diff and plan context. If `/review` is not available or fails, fall back to spawning a new session via the runtime's exec / subprocess command, piping the full filled `reviewer-prompt.md` (Part 1 + Part 2) as the initial message.
 - **Generic / no sub-agent primitive available** — perform an *inline* review pass within the same agent, but with explicit role switching:
   1. Output a hard divider (e.g. `--- REVIEW PASS ---`) so the boundary is visible.
   2. Load the full `reviewer-prompt.md` and restate the persona before evaluating.
