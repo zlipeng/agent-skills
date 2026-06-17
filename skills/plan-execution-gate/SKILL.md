@@ -1,8 +1,8 @@
 ---
 name: plan-execution-gate
 description: |
-  End-to-end workflow for multi-phase plans: generate → persist under `plans/` → branch → execute Phase-by-Phase with pre-Phase re-planning + isolated-context review gates → one commit per Phase → append Test Cases.
-  TRIGGER: "generate a plan and land it" / "write a plan" / "execute the plan" / "review the phase" / "生成方案并落地" / "写个 plan" / "执行 plan" / "review 一下 phase"; also when the user asks to save a plan to `plans/`, run a plan from `plans/`, review a completed Phase, or append Test Cases.
+  End-to-end workflow for multi-phase plans: generate → persist in an external Obsidian vault (per project) → branch → execute Phase-by-Phase with pre-Phase re-planning + isolated-context review gates → one commit per Phase (code only, no plan metadata) → append Test Cases.
+  TRIGGER: "generate a plan and land it" / "write a plan" / "execute the plan" / "review the phase" / "生成方案并落地" / "写个 plan" / "执行 plan" / "review 一下 phase"; also when the user asks to save a plan, run an existing plan, review a completed Phase, or append Test Cases.
   DO NOT TRIGGER for pure brainstorming, work that does not need persistence, or single-step tasks.
 ---
 
@@ -12,15 +12,55 @@ A complete loop: plan generation → persistence → phase-by-phase execution �
 
 ## 1. Plan Generation and Persistence
 
+Plan documents are **not** stored inside the code repository. They live in an external Obsidian vault, organised per project, so that local plans never pollute the repo or other developers' history.
+
+### Where plans are stored
+
+Resolve the storage directory at runtime:
+
+```bash
+# Vault root: env var wins, otherwise the default Obsidian location.
+PLANS_VAULT_DIR="${PLANS_VAULT_DIR:-$HOME/Documents/Obsidian/Plans}"
+# Per-project subfolder, named by the repo (human-readable for Obsidian browsing).
+PROJECT_NAME="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
+PLAN_DIR="$PLANS_VAULT_DIR/$PROJECT_NAME"
+mkdir -p "$PLAN_DIR"
+```
+
+- **Vault root**: `$PLANS_VAULT_DIR` if set, otherwise `~/Documents/Obsidian/Plans`.
+- **Project subfolder**: the basename of the git toplevel (e.g. `agent-skills`). Two different repos that share a basename are disambiguated by the `project_root` field written into each plan's frontmatter (below); if a real collision occurs, suffix the folder (`agent-skills-2`) and keep `project_root` as the source of truth.
+
+### Generation flow
+
 When the user asks to generate a plan and land it:
 
 1. Explore the relevant code to understand the current state.
 2. Align with the user on requirements and boundaries.
-3. Use the [plan template](references/plan-template.md) to draft a complete plan document.
-4. Scan the `plans/` directory, take the largest existing number `+1` (e.g. if the largest is `016-xxx.md`, the new file becomes `017-xxx.md`).
+3. Use the [plan template](references/plan-template.md) to draft a complete plan document, including the Obsidian frontmatter (below).
+4. Resolve `PLAN_DIR` as above. Scan it, take the largest existing number `+1` (e.g. if the largest is `016-xxx.md`, the new file becomes `017-xxx.md`); if the folder is empty, start at `001`.
 5. File name format: `{NNN}-{kebab-case-title}.md`.
-6. Save it under `plans/` using the Write tool.
-7. Confirm the saved path with the user.
+6. Save it under `PLAN_DIR` using the Write tool (an absolute path outside the repo).
+7. Ensure a per-project `_index.md` exists in `PLAN_DIR`; create it from the [index note](#per-project-index-note) on first use and add a row for the new plan.
+8. Confirm the saved absolute path with the user.
+
+### Obsidian frontmatter
+
+Every plan begins with YAML frontmatter so Obsidian's Dataview / Tasks plugins can aggregate across projects:
+
+```yaml
+---
+project: agent-skills
+project_root: /abs/path/to/repo      # true identity of the owning repo
+status: draft                        # draft | in-progress | done
+created: {YYYY-MM-DD}
+phase: 0/{N}                         # updated as Phases complete
+tags: [plan]
+---
+```
+
+### Per-project index note
+
+`_index.md` is a lightweight map-of-content listing every plan in this project's folder and its status (one line per plan, e.g. `` - [[001-foo]] — in-progress (phase 2/4) ``). Keep it in sync when plans are added or change status; never put plan bodies in it.
 
 The plan document MUST contain: background and current-state analysis, Goals / Non-Goals, key decisions (with rationale), phase-by-phase implementation steps (each Phase contains a `[ ]` checklist), Acceptance Criteria for each Phase, and dependency notes.
 
@@ -42,9 +82,9 @@ Once the language is chosen, apply it consistently across the entire plan docume
 
 1. **Verify the current branch** — before any Phase edit, run `git branch --show-current` and `git status`.
 2. **Branch off the main development branch**:
-   - Naming convention: first run `git branch -a | head -20` to observe the repository's existing feature-branch naming style (prefix such as `feat/` / `feature/` / `plan-` etc., whether it carries a number) and follow it. If the repo has no clear convention, default to `feat/plan-<NNN>-<short-kebab>`.
+   - Naming convention: first run `git branch -a | head -20` to observe the repository's existing feature-branch naming style (prefix such as `feat/` / `feature/` etc.) and follow it. If the repo has no clear convention, default to `feat/<short-kebab>`. **Do not embed the plan number in the branch name** — the plan lives outside the repo and its numbering must not leak into shared git history.
    - Command: `git checkout <base-branch> && git pull --ff-only && git checkout -b <new-branch>`, where `<base-branch>` is the repo's actual main development branch (commonly `main` / `master` / `dev` / `develop`).
-3. **The first Phase commit MUST land on this new branch.** All subsequent Phase commits, Test Cases additions, and commit-hash backfills happen on the same branch.
+3. **The first Phase commit MUST land on this new branch**, and so must every subsequent Phase commit. The plan-document updates (checkbox ticks, `**Reviewed**` notes, Test Cases, commit-hash backfill) are written to the plan file **in the Obsidian vault**, never committed to the repo.
 4. **Do NOT push or open a PR on your own initiative** — branch push and PR timing are decided by the user, unless the user explicitly tells you otherwise.
 5. **Do NOT switch back to `dev` / `main` to make plan-related changes.**
 
@@ -64,7 +104,7 @@ If a Phase commit has already been committed directly to a main branch (`main` /
 
 ## 3. Plan Execution Gate (Plan → Execute → Review, per Phase)
 
-When executing a multi-phase plan under `plans/`, every Phase MUST follow a strict **re-plan → execute → review** loop. The two hard gates are:
+When executing a multi-phase plan (stored in the Obsidian vault, see §1), every Phase MUST follow a strict **re-plan → execute → review** loop. The two hard gates are:
 
 - **Before** executing a Phase (from the second Phase onward), you MUST re-evaluate the remaining plan against what the previous Phases actually produced, and adjust it if necessary — so every Phase starts from an up-to-date plan rather than a stale one. See [Pre-Phase re-planning gate](#pre-phase-re-planning-gate).
 - **After** completing a Phase, you MUST run a review **in an isolated context** (a sub-agent / fresh session that has NOT seen the implementer's reasoning); only after that review passes may you move on to the next Phase. See [Post-Phase review gate](#post-phase-review-gate).
@@ -94,7 +134,7 @@ This keeps every Phase on an explicit plan → execute path: you never execute a
 2. **Run the impacted test suite (if it exists)** — identify the tests covering the code this Phase touched (unit, integration, or component tests), and run them with the project's own test command. When the project supports monorepo filters, tag filters, path filters, etc., **run only the relevant subset; full-suite runs are not required**. This step catches regressions of the form "code change type-checks but a runtime / rendering / unit-test assumption is broken" (typical example: a copy migration breaks a hard-coded assertion; a new Provider dependency in a component is not covered by the test wrapper). If the project has no test framework or the area touched by the current Phase has no existing tests, skip this step. If tests fail, fix them and re-run the review — skipping is forbidden.
 3. **Run the review pass** — load [`references/reviewer-prompt.md`](references/reviewer-prompt.md) in full and fill the Part 2 template with:
    - `{n}` — the current Phase number
-   - `{plan_path}` — the plan document path (e.g. `plans/017-foo.md`)
+   - `{plan_path}` — the plan document path in the vault (e.g. `~/Documents/Obsidian/Plans/agent-skills/017-foo.md`)
    - `{file_list}` — every file path this Phase touched
    - `{acceptance_criteria}` — the Phase's Acceptance Criteria, verbatim
 
@@ -102,14 +142,12 @@ This keeps every Phase on an explicit plan → execute path: you never execute a
 4. **Act on the review verdict**:
    - PASS → mark every task in this Phase as `[x]` in the plan document and append a line `**Reviewed**: <date> by reviewer`.
    - FAIL → stay in the current Phase and fix the listed problems. **Do NOT** proceed to the next Phase. Re-run the review pass after fixes.
-5. **Phase Commit Gate (mandatory commit)** — once the review passes and the plan document's checkboxes are updated, **you MUST create a single dedicated git commit before starting the next Phase**:
-   - Scope: include only the files this Phase actually changed (including the plan document's checkbox/Reviewed update). If unrelated dirty files exist, confirm with the user instead of mixing them in.
+5. **Phase Commit Gate (mandatory commit)** — once the review passes, **you MUST create a single dedicated git commit before starting the next Phase**:
+   - **Scope: commit only the key content — the source files this Phase actually changed.** The plan document lives in the external vault and **MUST NOT** be added to the commit; never `git add` the plan file or the vault. If unrelated dirty files exist, confirm with the user instead of mixing them in.
    - The project's static gates (type-check / lint / build) must pass; **never** skip commit hooks (no `--no-verify`, no `--no-gpg-sign`, etc.).
-   - The commit message must point back to the Plan and Phase. Recommended format:
-     - Subject: `<type>(plan-<NNN>): phase <n> - <Phase name>` (`type` is `feat` / `refactor` / `fix` etc., subject line ≤ 72 characters).
-     - Body: list the checklist items completed in this Phase + a line `Reviewed on <date>`.
-   - After creating the commit, run `git status` / `git log -1` to confirm success, then move to the next Phase.
-   - **Forbidden**: bundling multiple Phases into one commit; committing while review has not passed; modifying Phase content after the commit (if a fix is needed, create a new follow-up commit and note it in the plan document).
+   - **The commit message describes only the actual code change**, as a normal conventional commit: `<type>(<scope>): <what changed>` (`type` is `feat` / `refactor` / `fix` etc., subject ≤ 72 chars), with an optional body summarising the key changes. **Do NOT embed the plan number, Phase number, "Reviewed on", or any other plan-process metadata in the message** — that information stays in the vault plan document, so local plans never leak into the shared repo history.
+   - After creating the commit, run `git status` / `git log -1` to confirm success. Then update the plan document **in the vault**: tick this Phase's checkboxes, add the `**Reviewed**: <date>` note, bump `phase:` / `status:` in frontmatter, and backfill the commit hash + subject. Only then move to the next Phase.
+   - **Forbidden**: committing the plan file (or anything from the vault) into the repo; bundling multiple Phases into one commit; committing while review has not passed; modifying Phase content after the commit (if a fix is needed, create a new follow-up commit and note it in the plan document).
 6. **No parallel work across Phases** — unless the plan explicitly marks two Phases as dependency-free, run them strictly sequentially.
 
 ### Agent runtime adapters

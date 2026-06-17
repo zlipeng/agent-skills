@@ -1,10 +1,19 @@
 # Plan template
 
-Use the structure below when generating a Plan document. Number the file from `max(existing plans/) + 1`.
+Use the structure below when generating a Plan document. The plan is saved in the Obsidian vault at `${PLANS_VAULT_DIR:-~/Documents/Obsidian/Plans}/<project-name>/`, not in the code repo. Number the file from `max(existing plans in that folder) + 1`.
 
 > **Language note**: this template is shown in English, but the actual plan document must be written in the language selected by the SKILL.md "Document language priority" rule — the user's explicit request first, the conversation language second, English only as the final fallback. Translate the section headings below into the chosen language when you generate the plan.
 
 ```markdown
+---
+project: {project-name}
+project_root: {/abs/path/to/repo}
+status: draft            # draft | in-progress | done
+created: {YYYY-MM-DD}
+phase: 0/{N}
+tags: [plan]
+---
+
 # Plan {NNN} — {Title}
 
 > **Status**: Draft

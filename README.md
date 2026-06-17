@@ -8,7 +8,7 @@ Personal collection of [skills.sh](https://www.skills.sh/docs)-compatible agent 
 
 | Skill | Trigger | Description |
 |---|---|---|
-| [`plan-execution-gate`](skills/plan-execution-gate/SKILL.md) | "生成方案并落地" / "执行 plan" / "写个 plan" / "review phase" | End-to-end workflow: generate a multi-phase plan, save it under `plans/`, execute phase-by-phase with subagent review gates, and append test cases on completion. |
+| [`plan-execution-gate`](skills/plan-execution-gate/SKILL.md) | "生成方案并落地" / "执行 plan" / "写个 plan" / "review phase" | End-to-end workflow: generate a multi-phase plan, save it in an external Obsidian vault (per project), execute phase-by-phase with subagent review gates, commit only the code per Phase, and append test cases on completion. |
 | [`memory-keeper`](skills/memory-keeper/SKILL.md) | "保存记忆" / "记住这个" / "读取该项目记忆" / "remember this" / "load project memory" | Save **and load** durable project facts, context, and user preferences in a per-project memory store under `~/.agents/memories/`, with an `index.md` table of contents and one semantic file per fact. |
 
 ## Installation
