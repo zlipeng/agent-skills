@@ -4,9 +4,10 @@ A workflow skill that turns ad-hoc "let's plan this out" requests into a discipl
 
 1. **Generate** a multi-phase plan document under `plans/NNN-<kebab-title>.md`.
 2. **Branch** off the project's main development branch before any Phase commit.
-3. **Execute** each Phase, run scoped tests, then run an independent review pass (using the bundled reviewer prompt) to verify the checklist actually landed.
-4. **Commit** per Phase with a `<type>(plan-NNN): phase <n> - <name>` message — no batching, no skipping the hook.
-5. **Finalize** by appending a `## Test Cases` section that maps every Acceptance Criterion to a runnable case.
+3. **Re-plan before each Phase** (from Phase 2 onward) — re-validate the remaining steps against what earlier Phases actually produced, and update the plan document in place if reality has diverged.
+4. **Execute** each Phase, run scoped tests, then run an independent review pass in an **isolated context** (sub-agent or fresh session, using the bundled reviewer prompt) to verify the checklist actually landed.
+5. **Commit** per Phase with a `<type>(plan-NNN): phase <n> - <name>` message — no batching, no skipping the hook.
+6. **Finalize** by appending a `## Test Cases` section that maps every Acceptance Criterion to a runnable case.
 
 ## Runtime-agnostic
 

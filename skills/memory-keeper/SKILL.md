@@ -1,10 +1,10 @@
 ---
 name: memory-keeper
 description: |
-  Save and load durable knowledge — project facts, conversation context, or user requirements/preferences — in a per-project memory store under `~/.agents/memories/`.
-  TRIGGER (save) when: the user invokes this skill to persist something; says "save this to memory", "remember this", "记一下", "保存记忆", "记住这个", "把这个存到记忆里"; states a durable preference, decision, or constraint worth carrying across sessions; or asks to summarize the project / context for later.
-  TRIGGER (load) when: the user invokes this skill to recall; says "load project memory", "read my memories", "what do you remember", "读取该项目记忆", "加载记忆", "回忆一下这个项目"; or starts work on a project and wants prior context restored.
-  DO NOT TRIGGER when: the fact only matters to the current turn, is already recorded in the repo (code, README, git history), or the user is just asking a question without wanting anything persisted or recalled.
+  Save / load durable per-project knowledge (facts, decisions, user preferences) under `~/.agents/memories/`.
+  TRIGGER save: "save this to memory" / "remember this" / "记一下" / "保存记忆" / "记住这个" / "把这个存到记忆里"; or when a durable preference, decision, or constraint surfaces that should outlive the session.
+  TRIGGER load: "load project memory" / "read my memories" / "what do you remember" / "读取该项目记忆" / "加载记忆" / "回忆一下这个项目"; or when starting work on a project and prior context should be restored.
+  DO NOT TRIGGER for turn-local facts, things already captured in the repo (code / README / git history), or pure Q&A with no persistence intent.
 ---
 
 # Memory Keeper
@@ -54,6 +54,8 @@ MEM_DIR="$HOME/.agents/memories/$ENCODED"
 Example: `/Users/alice/Documents/github_workspace/agent-skills` → `-Users-alice-Documents-github-workspace-agent-skills`.
 
 If there is no project context at all (no git root and the cwd is not meaningful), ask the user which project this memory belongs to rather than guessing.
+
+## Saving memories
 
 Saving is a **two-step, confirm-before-write** flow: first present a report of exactly what would be saved, then write only after the user approves. Never write memory files before confirmation — this avoids persisting inaccurate content that has to be reworked later.
 

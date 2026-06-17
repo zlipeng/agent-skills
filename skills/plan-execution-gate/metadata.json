@@ -1,8 +1,8 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "zlipeng",
-  "date": "2026-05-27",
-  "abstract": "End-to-end workflow skill: generate a multi-phase plan, save it under plans/, execute each Phase with strict branch + commit gates, run an independent review pass between phases (using the bundled reviewer prompt), and append a Test Cases section once all phases pass. The review pass is described as a runtime-agnostic capability with adapters for Claude Code, Codex CLI, and generic agents — no specific subagent or tool is required. Plan documents follow a language-priority rule: explicit user request > conversation language > English fallback.",
+  "date": "2026-06-17",
+  "abstract": "End-to-end workflow skill for multi-phase plans: generate a plan, persist under plans/NNN-<title>.md, branch off the main development branch, then execute Phase-by-Phase with two hard gates — a pre-Phase re-planning gate that re-validates remaining steps against what earlier Phases actually produced, and a post-Phase review gate that runs the bundled reviewer prompt in an isolated context (sub-agent or fresh session) so the reviewer cannot inherit the implementer's reasoning. Each Phase ends in a single dedicated commit; once all Phases pass review, a Test Cases section is appended that maps every Acceptance Criterion to a runnable case. Includes runtime adapters for Claude Code (/code-review skill or Agent sub-agent), Codex CLI (/review or subprocess session), and a generic inline fallback. Plan documents follow a language-priority rule: explicit user request > conversation language > English fallback.",
   "references": [
     "references/plan-template.md",
     "references/reviewer-prompt.md"

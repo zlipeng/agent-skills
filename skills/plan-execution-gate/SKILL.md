@@ -1,9 +1,9 @@
 ---
 name: plan-execution-gate
 description: |
-  End-to-end workflow for generating, persisting, and executing multi-phase plans with strict Phase-by-Phase review gates.
-  TRIGGER when: (1) user asks to generate a plan / spec / proposal and save it under `plans/`; (2) user asks to execute a multi-phase plan from `plans/`; (3) the conversation contains intents like "generate a plan and land it", "write a plan", "execute the plan", "review the phase", "生成方案并落地", "写个 plan", "执行 plan", "review 一下 phase"; (4) user wants to review a completed Phase or append a Test Cases section.
-  DO NOT TRIGGER when: the user is only brainstorming, does not need persistence, or the task is a single-step operation.
+  End-to-end workflow for multi-phase plans: generate → persist under `plans/` → branch → execute Phase-by-Phase with pre-Phase re-planning + isolated-context review gates → one commit per Phase → append Test Cases.
+  TRIGGER: "generate a plan and land it" / "write a plan" / "execute the plan" / "review the phase" / "生成方案并落地" / "写个 plan" / "执行 plan" / "review 一下 phase"; also when the user asks to save a plan to `plans/`, run a plan from `plans/`, review a completed Phase, or append Test Cases.
+  DO NOT TRIGGER for pure brainstorming, work that does not need persistence, or single-step tasks.
 ---
 
 # Plan Execution Gate
@@ -38,7 +38,7 @@ Once the language is chosen, apply it consistently across the entire plan docume
 
 **Before executing any Plan (before the first Phase 1 commit), you MUST create a dedicated feature branch off the main development branch.** Pushing Phase commits directly to `dev` / `main` is forbidden.
 
-### Required flow
+### Branch gate flow
 
 1. **Verify the current branch** — before any Phase edit, run `git branch --show-current` and `git status`.
 2. **Branch off the main development branch**:
@@ -88,7 +88,7 @@ This keeps every Phase on an explicit plan → execute path: you never execute a
 
 "Isolated review" means: the reviewer evaluates the Phase using the persona and checklist in [`references/reviewer-prompt.md`](references/reviewer-prompt.md) **from a clean context** — it must not inherit the implementer's chat history, intermediate reasoning, or hypotheses, so it cannot rubber-stamp its own assumptions. The reviewer re-reads the files from disk and judges only the evidence. How that isolation is achieved depends on the host agent runtime — see [Agent runtime adapters](#agent-runtime-adapters) below.
 
-### Required flow
+### Phase execution flow
 
 1. **Complete every task inside the Phase** — every `[ ]` checkbox under the Phase is ticked, and the project's static gates (type-check / lint / build, if any) all pass.
 2. **Run the impacted test suite (if it exists)** — identify the tests covering the code this Phase touched (unit, integration, or component tests), and run them with the project's own test command. When the project supports monorepo filters, tag filters, path filters, etc., **run only the relevant subset; full-suite runs are not required**. This step catches regressions of the form "code change type-checks but a runtime / rendering / unit-test assumption is broken" (typical example: a copy migration breaks a hard-coded assertion; a new Provider dependency in a component is not covered by the test wrapper). If the project has no test framework or the area touched by the current Phase has no existing tests, skip this step. If tests fail, fix them and re-run the review — skipping is forbidden.
