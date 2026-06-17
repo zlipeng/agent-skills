@@ -18,6 +18,8 @@ The user can invoke the skill directly, or issue an instruction.
 - "记一下" / "保存记忆" / "记住这个"
 - "summarize the project and keep it for later"
 
+Saving is confirm-before-write: the skill first shows a report of exactly what it would persist (target paths, new vs. update, type, full content, index changes) and writes only after the user approves — so inaccurate content never lands and has to be reworked.
+
 **Load:**
 
 - "load project memory" / "read my memories" / "what do you remember about this project"

@@ -55,15 +55,28 @@ Example: `/Users/alice/Documents/github_workspace/agent-skills` → `-Users-alic
 
 If there is no project context at all (no git root and the cwd is not meaningful), ask the user which project this memory belongs to rather than guessing.
 
-## Saving memories
+Saving is a **two-step, confirm-before-write** flow: first present a report of exactly what would be saved, then write only after the user approves. Never write memory files before confirmation — this avoids persisting inaccurate content that has to be reworked later.
 
-1. **Resolve the memory directory** — compute `MEM_DIR` with the snippet above and create it: `mkdir -p "$MEM_DIR"`.
-2. **Distill the fact** — reduce the content to the durable essence (1–2 short paragraphs). One file = one coherent fact. If the user dumped several unrelated facts, create several files.
-3. **Check for duplicates first** — look at `index.md` and existing files in `MEM_DIR`. If a memory already covers this topic, **update that file in place** instead of creating a near-duplicate. Delete memories that have become wrong.
-4. **Ensure the index exists** — if `index.md` is absent, create it from the [index template](#indexmd-template) before adding the first memory.
-5. **Write the memory file** — name it `<topic>-<detail>.md` in semantic kebab-case (e.g. `build-pnpm-commands.md`, `user-prefers-terse-replies.md`, `auth-jwt-decision.md`). Use the [memory file template](#memory-file-template). Avoid generic names like `note-1.md`.
-6. **Update the index** — add or update a one-line pointer in `index.md`: `` - [`<file>`](<file>) — <one-line hook> `` under the matching type heading.
-7. **Confirm** — report the saved absolute path(s) back to the user.
+### Step 1 — Draft a report (no writes yet)
+
+1. **Resolve the memory directory** — compute `MEM_DIR` with the snippet above. Do **not** create it or write anything yet.
+2. **Distill the fact** — reduce the content to the durable essence (1–2 short paragraphs). One file = one coherent fact. If the user dumped several unrelated facts, plan several files.
+3. **Check for duplicates** — read `index.md` and existing files in `MEM_DIR` (read-only). If a memory already covers this topic, plan to **update that file in place** rather than create a near-duplicate; note any memory that is now wrong and should be deleted.
+4. **Present the save report and ask for confirmation** — show the user, for each memory to be written:
+   - the target absolute path and whether it is **new** or an **update** (and any deletion);
+   - the proposed semantic filename;
+   - the `type` (user / feedback / project / reference);
+   - the **full distilled content** that would be written (verbatim, including frontmatter);
+   - the exact `index.md` line that would be added or changed.
+
+   Then explicitly ask the user to confirm or correct it. **Do not proceed without explicit approval.** If the user requests changes, revise the report and re-confirm. Treat silence or an ambiguous reply as "not approved".
+
+### Step 2 — Write (only after approval)
+
+5. **Create the directory and index** — `mkdir -p "$MEM_DIR"`; if `index.md` is absent, create it from the [index template](#indexmd-template) before adding the first memory.
+6. **Write the memory file(s)** — exactly as approved. Name each `<topic>-<detail>.md` in semantic kebab-case (e.g. `build-pnpm-commands.md`, `user-prefers-terse-replies.md`, `auth-jwt-decision.md`), using the [memory file template](#memory-file-template). Avoid generic names like `note-1.md`.
+7. **Update the index** — add or update the one-line pointer in `index.md`: `` - [`<file>`](<file>) — <one-line hook> `` under the matching type heading.
+8. **Confirm** — report the saved absolute path(s) back to the user.
 
 ## Memory file template
 
