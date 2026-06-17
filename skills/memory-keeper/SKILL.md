@@ -1,20 +1,31 @@
 ---
 name: memory-keeper
 description: |
-  Summarize and persist durable knowledge — project facts, conversation context, or user requirements/preferences — into a per-project memory store under `~/.agents/memories/`.
-  TRIGGER when: (1) the user invokes this skill directly; (2) the user says things like "save this to memory", "remember this", "记一下", "保存记忆", "记住这个", "把这个存到记忆里"; (3) the user states a durable preference, decision, or constraint worth carrying across sessions; (4) the user asks to summarize the project / context and keep it for later.
-  DO NOT TRIGGER when: the fact only matters to the current turn, is already recorded in the repo (code, README, git history), or the user is just asking a question without wanting anything persisted.
+  Save and load durable knowledge — project facts, conversation context, or user requirements/preferences — in a per-project memory store under `~/.agents/memories/`.
+  TRIGGER (save) when: the user invokes this skill to persist something; says "save this to memory", "remember this", "记一下", "保存记忆", "记住这个", "把这个存到记忆里"; states a durable preference, decision, or constraint worth carrying across sessions; or asks to summarize the project / context for later.
+  TRIGGER (load) when: the user invokes this skill to recall; says "load project memory", "read my memories", "what do you remember", "读取该项目记忆", "加载记忆", "回忆一下这个项目"; or starts work on a project and wants prior context restored.
+  DO NOT TRIGGER when: the fact only matters to the current turn, is already recorded in the repo (code, README, git history), or the user is just asking a question without wanting anything persisted or recalled.
 ---
 
 # Memory Keeper
 
-Distill what matters into one fact per file, and save it to a per-project memory store so it survives across sessions and agents.
+A per-project memory store that survives across sessions and agents. Two modes:
+
+- **Save** — distill what matters into one fact per file. See [Saving memories](#saving-memories).
+- **Load** — restore prior context for the current project. See [Loading memories](#loading-memories).
+
+Both modes resolve the same per-project directory the same way — see [Storage layout](#storage-layout).
 
 ## When to use
 
+**Save** when:
 - The user explicitly asks to remember / save something ("保存记忆", "remember this", "记住").
 - A durable fact surfaces that future sessions would benefit from: a user preference, a project goal or constraint, a non-obvious decision, or a pointer to an external resource.
 - The user asks to summarize the project or current context for later reuse.
+
+**Load** when:
+- The user invokes the skill to recall, or says "读取该项目记忆", "加载记忆", "read my memories", "what do you remember about this project".
+- You are starting work on a project and want any previously-saved context, preferences, or decisions restored before acting.
 
 Do **not** save: things only relevant to this turn, facts already captured in the repo (code structure, past fixes, git history, CLAUDE.md/AGENTS.md), or secrets/credentials.
 
@@ -44,7 +55,7 @@ Example: `/Users/alice/Documents/github_workspace/agent-skills` → `-Users-alic
 
 If there is no project context at all (no git root and the cwd is not meaningful), ask the user which project this memory belongs to rather than guessing.
 
-## Workflow
+## Saving memories
 
 1. **Resolve the memory directory** — compute `MEM_DIR` with the snippet above and create it: `mkdir -p "$MEM_DIR"`.
 2. **Distill the fact** — reduce the content to the durable essence (1–2 short paragraphs). One file = one coherent fact. If the user dumped several unrelated facts, create several files.
@@ -103,6 +114,16 @@ Memory types:
 
 Keep the index to one line per memory — never put memory bodies in `index.md`. When a file is updated or deleted, update its index line to match (or remove it).
 
-## Recall
+## Loading memories
 
-These memories are written to be re-read at the start of future work on the same project: resolve `MEM_DIR` the same way, read `index.md`, and open the files whose hooks look relevant. A memory reflects what was true when written — if it names a file, flag, or function, verify that still exists before acting on it.
+When the user asks to load / read the project's memory (or you are restoring context before starting work):
+
+1. **Resolve the memory directory** — compute `MEM_DIR` exactly as in [Storage layout](#storage-layout) (`git rev-parse --show-toplevel` → encode → `~/.agents/memories/<encoded>/`).
+2. **Check existence** — if `MEM_DIR` or its `index.md` does not exist, tell the user there are no saved memories for this project yet (and offer to start saving). Do not invent memories.
+3. **Read the index first** — open `index.md` to get the table of contents and the one-line hook for every memory. This is the cheap overview.
+4. **Decide what to open**:
+   - On a broad request ("load all project memory", "回忆一下这个项目") read every memory file so nothing is missed.
+   - On a scoped request ("what do you remember about auth?") read only the files whose hooks/`tags` match, to stay context-efficient.
+5. **Apply, don't just dump** — fold the loaded facts into how you proceed: honor `user`/`feedback` preferences, respect `project` constraints, and follow `reference` pointers. Resolve `[[other-file-slug]]` links by opening the referenced memory when relevant.
+6. **Verify before acting** — a memory reflects what was true when written. If it names a file, flag, function, or date, confirm that still holds in the current repo before relying on it; flag anything that looks stale to the user.
+7. **Summarize** — give the user a short briefing of what was loaded (grouped by type), not a raw paste of every file.

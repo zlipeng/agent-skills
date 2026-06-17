@@ -1,6 +1,6 @@
 # memory-keeper
 
-A skill for persisting durable knowledge across sessions. It distills project facts, conversation context, and user requirements/preferences into a per-project memory store under `~/.agents/memories/`.
+A skill for persisting **and recalling** durable knowledge across sessions. It distills project facts, conversation context, and user requirements/preferences into a per-project memory store under `~/.agents/memories/`, and loads them back when you return to the project.
 
 ## How it works
 
@@ -10,11 +10,20 @@ A skill for persisting durable knowledge across sessions. It distills project fa
 
 ## Triggering
 
-The user can invoke the skill directly, or issue an instruction such as:
+The user can invoke the skill directly, or issue an instruction.
+
+**Save:**
 
 - "save this to memory" / "remember this"
 - "记一下" / "保存记忆" / "记住这个"
 - "summarize the project and keep it for later"
+
+**Load:**
+
+- "load project memory" / "read my memories" / "what do you remember about this project"
+- "读取该项目记忆" / "加载记忆" / "回忆一下这个项目"
+
+Loading reads `index.md` first for a cheap overview, then opens the relevant memory files (all of them on a broad request, only the matching ones on a scoped request), applies the facts, and gives a short briefing instead of dumping raw files.
 
 It deliberately does **not** fire for facts that only matter to the current turn, things already recorded in the repo, or secrets.
 
