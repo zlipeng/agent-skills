@@ -1,0 +1,7 @@
+{
+  "version": "0.1.0",
+  "author": "zlipeng",
+  "date": "2026-06-17",
+  "abstract": "Summarize and persist durable knowledge — project facts, conversation context, and user requirements/preferences — into a per-project memory store under ~/.agents/memories/. Each project gets its own subdirectory, named by encoding the absolute project root path the same way Claude Code names ~/.claude/projects/ directories (non-alphanumeric characters replaced by '-'). An index.md table of contents is generated first; each fact is then saved as a semantically-named <topic>-<detail>.md file with light YAML frontmatter classifying it as user / feedback / project / reference. Triggered by direct invocation or instructions like 'save memory' / '保存记忆' / 'remember this'.",
+  "references": []
+}

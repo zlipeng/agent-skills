@@ -6,6 +6,11 @@
       "title": "Workflow",
       "description": "Plan/execution workflow skills.",
       "skills": ["plan-execution-gate"]
+    },
+    {
+      "title": "Memory",
+      "description": "Knowledge capture and persistence skills.",
+      "skills": ["memory-keeper"]
     }
   ]
 }
