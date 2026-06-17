@@ -62,11 +62,31 @@ If a Phase commit has already been committed directly to a main branch (`main` /
 - When the Plan explicitly declares it is a documentation-only change (no code changes) and has only one Phase, a single commit directly on the main branch is allowed.
 - The user explicitly instructs you in the conversation to "commit directly to the main branch".
 
-## 3. Plan Execution Gate (Phase-by-Phase Review)
+## 3. Plan Execution Gate (Plan → Execute → Review, per Phase)
 
-When executing a multi-phase plan under `plans/`, **after every Phase completion you MUST run an independent review pass; only after that review passes may you move on to the next Phase.**
+When executing a multi-phase plan under `plans/`, every Phase MUST follow a strict **re-plan → execute → review** loop. The two hard gates are:
 
-"Independent review pass" means: the reviewer evaluates the Phase using the persona and checklist in [`references/reviewer-prompt.md`](references/reviewer-prompt.md), without being anchored to the implementer's reasoning. How that isolation is achieved depends on the host agent runtime — see [Agent runtime adapters](#agent-runtime-adapters) below.
+- **Before** executing a Phase (from the second Phase onward), you MUST re-evaluate the remaining plan against what the previous Phases actually produced, and adjust it if necessary — so every Phase starts from an up-to-date plan rather than a stale one. See [Pre-Phase re-planning gate](#pre-phase-re-planning-gate).
+- **After** completing a Phase, you MUST run a review **in an isolated context** (a sub-agent / fresh session that has NOT seen the implementer's reasoning); only after that review passes may you move on to the next Phase. See [Post-Phase review gate](#post-phase-review-gate).
+
+### Pre-Phase re-planning gate
+
+The plan written in §1 is a hypothesis. Earlier Phases routinely surface facts that invalidate later Phases (an API differs from what was assumed, a file was already refactored, a dependency is heavier than expected). **Executing a later Phase against an unrevised plan is forbidden** — re-confirm first.
+
+Before starting **Phase 2 and every subsequent Phase**:
+
+1. **Gather the actual outcomes of all completed Phases** — the review verdicts, the diffs that actually landed, any deviations recorded in the plan document, and any new constraints discovered.
+2. **Compare them against the upcoming Phase's steps and Acceptance Criteria.** Ask explicitly: do the assumptions this Phase was written on still hold? Did earlier work already cover, remove, or change anything this Phase planned?
+3. **Decide and act**:
+   - **No change needed** → record a one-line note in the plan document (e.g. `**Re-planned**: <date> — no change, assumptions hold`) and proceed.
+   - **Change needed** → update the plan document in place: rewrite the affected Phase's steps / checklist / Acceptance Criteria, add or remove Phases as required, and append a short `**Re-planned**: <date> — <what changed and why>` note. Keep the file-numbering and structure rules from §1. If the change is large enough to alter scope or user-visible behavior, confirm with the user before continuing.
+4. **Only then** begin executing the Phase. The plan document is always the single source of truth — never carry plan changes only in your head.
+
+This keeps every Phase on an explicit plan → execute path: you never execute a step that hasn't just been re-validated against reality.
+
+### Post-Phase review gate
+
+"Isolated review" means: the reviewer evaluates the Phase using the persona and checklist in [`references/reviewer-prompt.md`](references/reviewer-prompt.md) **from a clean context** — it must not inherit the implementer's chat history, intermediate reasoning, or hypotheses, so it cannot rubber-stamp its own assumptions. The reviewer re-reads the files from disk and judges only the evidence. How that isolation is achieved depends on the host agent runtime — see [Agent runtime adapters](#agent-runtime-adapters) below.
 
 ### Required flow
 
@@ -78,7 +98,7 @@ When executing a multi-phase plan under `plans/`, **after every Phase completion
    - `{file_list}` — every file path this Phase touched
    - `{acceptance_criteria}` — the Phase's Acceptance Criteria, verbatim
 
-   Then execute the review using the runtime-specific mechanism from [Agent runtime adapters](#agent-runtime-adapters). The reviewer prompt itself is identical across runtimes; only the *invocation mechanism* changes.
+   Then execute the review **in an isolated context (a sub-agent or fresh session)** using the runtime-specific mechanism from [Agent runtime adapters](#agent-runtime-adapters). The reviewer prompt itself is identical across runtimes; only the *invocation mechanism* changes. Inline same-context review is a last resort, allowed only when the runtime has no sub-agent primitive.
 4. **Act on the review verdict**:
    - PASS → mark every task in this Phase as `[x]` in the plan document and append a line `**Reviewed**: <date> by reviewer`.
    - FAIL → stay in the current Phase and fix the listed problems. **Do NOT** proceed to the next Phase. Re-run the review pass after fixes.
@@ -94,17 +114,17 @@ When executing a multi-phase plan under `plans/`, **after every Phase completion
 
 ### Agent runtime adapters
 
-The review pass needs *fresh context* and *reviewer persona* — nothing more. Pick the mechanism that fits your runtime. **Always prefer the runtime's native review command over a generic sub-agent when one is available:**
+The review pass has one non-negotiable requirement: **it must run in a context isolated from the implementation work** — a sub-agent or a fresh session that carries the reviewer persona but none of the implementer's history. Inheriting the current context defeats the gate, because a reviewer that already "knows" what the code was meant to do will confirm its own assumptions. Pick the strongest isolation your runtime offers, top to bottom:
 
-- **Claude Code** — invoke the `/code-review` skill first. Pass the file list and plan context so the review targets the exact Phase diff. If `/code-review` is not available or fails, fall back to the `Agent` tool with `subagent_type: "code-reviewer"` (or `"general-purpose"`), passing the filled Part 2 template as the `prompt` with the Part 1 persona prepended.
-- **Codex CLI** — run the native `/review` command first, piping the Phase diff and plan context. If `/review` is not available or fails, fall back to spawning a new session via the runtime's exec / subprocess command, piping the full filled `reviewer-prompt.md` (Part 1 + Part 2) as the initial message.
-- **Generic / no sub-agent primitive available** — perform an *inline* review pass within the same agent, but with explicit role switching:
+- **Claude Code** — invoke the `/code-review` skill first (it runs the review against the diff in its own context). Pass the file list and plan context so the review targets the exact Phase diff. If `/code-review` is not available or fails, spawn a **dedicated sub-agent** via the `Agent` tool with `subagent_type: "code-reviewer"` (or `"general-purpose"`), passing the filled Part 2 template as the `prompt` with the Part 1 persona prepended. The sub-agent starts with a clean context by construction — this is the isolation guarantee, so prefer it over any inline pass.
+- **Codex CLI** — run the native `/review` command first (fresh-context review of the Phase diff), piping the Phase diff and plan context. If `/review` is not available or fails, spawn a **new session** via the runtime's exec / subprocess command, piping the full filled `reviewer-prompt.md` (Part 1 + Part 2) as the initial message — again a clean context, not the current one.
+- **Generic — only when the runtime truly has no sub-agent or sub-session primitive** — fall back to an *inline* review pass within the same agent. This is a degraded mode: it cannot fully shed the current context, so treat it as a last resort and call it out in the report. Mitigate the contamination as much as possible:
   1. Output a hard divider (e.g. `--- REVIEW PASS ---`) so the boundary is visible.
   2. Load the full `reviewer-prompt.md` and restate the persona before evaluating.
-  3. Do NOT reference the implementation reasoning, partial diffs, or hypothesis from earlier in the session — re-read the files from disk.
-  4. Emit the review report in the exact output format defined by Part 2.
+  3. Do NOT reference the implementation reasoning, partial diffs, or hypothesis from earlier in the session — re-read the files from disk and judge only what is on disk.
+  4. Emit the review report in the exact output format defined by Part 2, and add a one-line note that the review ran inline (no isolated context available).
 
-In all three modes, the report MUST follow the output format in Part 2 of `reviewer-prompt.md`. The review verdict is the *report*, not the host agent's summary of it.
+In all modes, the report MUST follow the output format in Part 2 of `reviewer-prompt.md`. The review verdict is the *report* produced in the isolated context, not the host agent's summary of it.
 
 ### Exemptions
 
