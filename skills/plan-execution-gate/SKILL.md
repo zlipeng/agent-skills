@@ -62,6 +62,22 @@ tags: [plan]
 
 `_index.md` is a lightweight map-of-content listing every plan in this project's folder and its status (one line per plan, e.g. `` - [[001-foo]] — in-progress (phase 2/4) ``). Keep it in sync when plans are added or change status; never put plan bodies in it.
 
+### File-path references (clickable from Obsidian)
+
+The plan lives in the vault, but the source code lives in the repo at `project_root` — a completely different location on disk. **Never cite a source file with a repo-relative or vault-relative path inside a markdown link**: Obsidian resolves the link target against the vault, the file isn't there, and the click fails.
+
+Instead, write every source-file reference as a **VS Code deep link with an absolute path anchored at `project_root`**, including the line number when known:
+
+```
+[<short readable label>](vscode://file/<project_root>/<repo-relative-path>:<line>)
+```
+
+- Example: `[useAuth.ts:42](vscode://file/Users/me/work/plus-ops-frontend/src/hooks/useAuth.ts:42)` — clicking opens that file at line 42 in VS Code.
+- The label stays human-readable (the repo-relative path or a symbol name); only the link **target** is the absolute `vscode://file/...` URI.
+- `project_root` comes from the plan's frontmatter; `<project_root>` already begins with `/`, so `vscode://file` + the absolute path yields a single slash (`vscode://file/Users/...`).
+- For a line **range**, link to the starting line (`:174`). For a whole-file reference, omit `:<line>`.
+- This rule applies **everywhere** a file is cited: `Target area`, the current-state audit table, each Phase's `Files covered`, task descriptions, and the Test Cases `Paths` field.
+
 The plan document MUST contain: background and current-state analysis, Goals / Non-Goals, key decisions (with rationale), phase-by-phase implementation steps (each Phase contains a `[ ]` checklist), Acceptance Criteria for each Phase, and dependency notes.
 
 ### Document language priority
@@ -180,7 +196,7 @@ Once every Phase of the Plan is complete and review has passed, **you MUST appen
    - **Title** (a short description of what is verified)
    - **Preconditions** (environment, data, entry state)
    - **Steps** (numbered 1/2/3..., each step concrete to a click / input / command)
-   - **Paths involved** (source-file path + line number, format `path/to/file.ts:42`; for UI cases include the page route / component path)
+   - **Paths involved** — cite each source file as a VS Code deep link anchored at `project_root` (see [File-path references](#file-path-references-clickable-from-obsidian)), e.g. `[foo.ts:42](vscode://file/<project_root>/path/to/foo.ts:42)`; for UI cases include the page route / component path
    - **Expected result** (observable UI, log line, DB state, or event)
 4. **Use the template** in [Plan template - Test Cases section](references/plan-template.md).
 5. **Forbidden**: vague descriptions like "verify the feature works"; missing path references; no executable steps.

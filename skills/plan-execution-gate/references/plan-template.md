@@ -4,6 +4,8 @@ Use the structure below when generating a Plan document. The plan is saved in th
 
 > **Language note**: this template is shown in English, but the actual plan document must be written in the language selected by the SKILL.md "Document language priority" rule — the user's explicit request first, the conversation language second, English only as the final fallback. Translate the section headings below into the chosen language when you generate the plan.
 
+> **File-path links**: every source-file reference must be a VS Code deep link anchored at `project_root`, e.g. `[src/hooks/useAuth.ts:42](vscode://file/<project_root>/src/hooks/useAuth.ts:42)`. Never use a repo-relative or vault-relative path as a link target — it breaks when clicked in Obsidian. See SKILL.md § "File-path references".
+
 ```markdown
 ---
 project: {project-name}
@@ -60,9 +62,9 @@ tags: [plan]
 
 **Goal**: {One-sentence description of the effect this Phase produces.}
 
-**Files covered**:
-- `path/to/file1.ts`
-- `path/to/file2.tsx`
+**Files covered** (deep-linked to the source at `project_root`):
+- [path/to/file1.ts](vscode://file/<project_root>/path/to/file1.ts)
+- [path/to/file2.tsx](vscode://file/<project_root>/path/to/file2.tsx)
 
 **Tasks**:
 - [ ] Task 1 description
@@ -105,7 +107,7 @@ Once every Phase is complete and review has passed, append the following section
   1. {Concrete operation — click / input / command}
   2. {Concrete operation}
   3. {Concrete operation}
-- **Paths**: `packages/.../foo.ts:L12`, `packages/renderer/src/pages/Bar.tsx`
+- **Paths**: [packages/.../foo.ts:12](vscode://file/<project_root>/packages/.../foo.ts:12), [packages/renderer/src/pages/Bar.tsx](vscode://file/<project_root>/packages/renderer/src/pages/Bar.tsx)
 - **Expected**: {observable UI, log line, DB state, or event}
 
 ### TC-002: {Case title}
