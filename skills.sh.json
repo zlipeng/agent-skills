@@ -11,6 +11,11 @@
       "title": "Memory",
       "description": "Knowledge capture and persistence skills.",
       "skills": ["memory-keeper"]
+    },
+    {
+      "title": "API",
+      "description": "API spec exploration and integration skills.",
+      "skills": ["swagger-explorer"]
     }
   ]
 }
