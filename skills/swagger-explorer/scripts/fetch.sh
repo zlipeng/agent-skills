@@ -3,6 +3,7 @@
 #
 # Usage:
 #   fetch.sh <url> [--refresh]
+#   fetch.sh --path <api-path> [--refresh]   # resolve URL via the registry
 #
 # <url> may be either:
 #   - a direct api-docs JSON URL                  (e.g. .../v2/api-docs)
@@ -10,6 +11,12 @@
 # In the UI case, fetch.sh delegates to resolve.sh to discover the real JSON
 # URL via /v3/api-docs/swagger-config or /swagger-resources, and surfaces any
 # tag / operationId hints from the URL fragment in its output.
+#
+# When --path <api-path> is given instead of a URL, fetch.sh looks up the
+# longest registered path-prefix in the registry (registry.sh lookup) and uses
+# that entry's URL. This serves the "user gave only an API path, no swagger
+# URL" case. On a successful fetch, the discovered prefix -> URL mapping is
+# also (re)registered automatically (unless SWAGGER_SKILL_AUTOREGISTER=0).
 #
 # Output (stdout, one key=value per line — easy for the agent to parse):
 #   id=<sha1>
@@ -24,22 +31,51 @@
 #   group=<config name from urls.primaryName, only set for UI URLs>
 #   tag=<hash tag, only set if present in input URL>
 #   operation_id=<hash operationId, only set if present in input URL>
+#   registry_matched=true    # only set when the URL came from registry lookup
+#   registry_prefix=<prefix> # only set when the URL came from registry lookup
 #
 # The cache lives at ~/.cache/swagger-skill/<sha1(json_url)>.{json,index.json}.
 # Default TTL: 24h. Pass --refresh to force a re-download.
 
 set -euo pipefail
 
-INPUT_URL="${1:-}"
-REFRESH="${2:-}"
+INPUT_URL=""
+REFRESH=""
+REGISTRY_PATH=""
 
+# Parse args. Supported forms:
+#   fetch.sh <url> [--refresh]
+#   fetch.sh --path <api-path> [--refresh]   # resolve URL via registry.sh lookup
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --refresh) REFRESH="--refresh"; shift;;
+    --path)    REGISTRY_PATH="$2"; shift 2;;
+    *)         INPUT_URL="$1"; shift;;
+  esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# If no URL was given, try to resolve one from the registry by API path prefix.
+REGISTRY_PREFIX=""
 if [[ -z "$INPUT_URL" ]]; then
-  echo "usage: fetch.sh <url> [--refresh]" >&2
-  exit 2
+  if [[ -z "$REGISTRY_PATH" ]]; then
+    echo "usage: fetch.sh <url> [--refresh]" >&2
+    echo "       fetch.sh --path <api-path> [--refresh]   # resolve URL via registry" >&2
+    exit 2
+  fi
+  LOOKUP_OUT="$(bash "$SCRIPT_DIR/registry.sh" lookup "$REGISTRY_PATH")"
+  MATCHED="$(printf '%s\n' "$LOOKUP_OUT" | awk -F= '/^matched=/{print $2}')"
+  if [[ "$MATCHED" != "true" ]]; then
+    echo "fetch.sh: no registry entry matches path '$REGISTRY_PATH'" >&2
+    echo "  register one with: registry.sh add <prefix> <swagger-url>" >&2
+    exit 1
+  fi
+  INPUT_URL="$(printf '%s\n' "$LOOKUP_OUT" | awk -F= '/^url=/{print substr($0, index($0,"=")+1)}')"
+  REGISTRY_PREFIX="$(printf '%s\n' "$LOOKUP_OUT" | awk -F= '/^prefix=/{print $2}')"
 fi
 
-# Resolve UI URLs → JSON URL (no-op for direct JSON URLs).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve UI URLs -> JSON URL (no-op for direct JSON URLs).
 RESOLVE_OUT="$(bash "$SCRIPT_DIR/resolve.sh" "$INPUT_URL")"
 
 URL="$(printf '%s\n' "$RESOLVE_OUT" | awk -F= '/^json_url=/{print substr($0, index($0,"=")+1)}')"
@@ -144,6 +180,42 @@ jq -n --arg url "$URL" --arg id "$ID" \
       --arg fetched_at "$(date -u +%FT%TZ)" \
   '{id:$id, url:$url, fetched_at:$fetched_at}' > "$META"
 
+# Auto-register the spec's common path-prefix -> URL mapping, so future calls
+# that only give an API path can resolve via registry.sh. We derive the prefix
+# as the longest common prefix of the spec's endpoint paths, truncated to the
+# last "/". Skip if the prefix is too short (fewer than 2 path segments, e.g.
+# "/" or "/api") to avoid over-broad registrations.
+AUTOREGISTER="${SWAGGER_SKILL_AUTOREGISTER:-1}"
+if [[ "$AUTOREGISTER" == "1" ]]; then
+  DERIVED_PREFIX="$(jq -r '
+    [.endpoints[].path] as $paths
+    | (if ($paths | length) == 0 then ""
+       else
+         ($paths | sort)[0] as $first
+         | ($paths | sort)[-1] as $last
+         | reduce range(0; ($first | length)) as $i (
+             ""; . + (if ($first[$i:$i+1] == $last[$i:$i+1]) then $first[$i:$i+1] else "" end)
+           )
+         | sub("/[^/]*$"; "")   # truncate to last "/"
+       end)
+  ' "$INDEX" 2>/dev/null || true)"
+  SEGMENT_COUNT="$(printf '%s' "$DERIVED_PREFIX" | awk -F/ '{print NF}')"
+  # e.g. "/api/order" -> split by "/" gives ["", "api", "order"] -> NF=3
+  if [[ -n "$DERIVED_PREFIX" && "$SEGMENT_COUNT" -ge 3 ]]; then
+    # Check for an existing entry with this prefix; never overwrite a manual one.
+    EXISTING="$(bash "$SCRIPT_DIR/registry.sh" lookup "$DERIVED_PREFIX/" 2>/dev/null || true)"
+    EXISTING_PREFIX="$(printf '%s\n' "$EXISTING" | awk -F= '/^prefix=/{print $2}')"
+    EXISTING_URL="$(printf '%s\n' "$EXISTING" | awk -F= '/^url=/{print substr($0, index($0,"=")+1)}')"
+    if [[ -z "$EXISTING_PREFIX" ]]; then
+      bash "$SCRIPT_DIR/registry.sh" add "$DERIVED_PREFIX" "$INPUT_URL" --source auto >/dev/null 2>&1 || true
+      REGISTRY_PREFIX="$DERIVED_PREFIX"
+    elif [[ "$EXISTING_URL" != "$URL" && "$EXISTING_PREFIX" == "$DERIVED_PREFIX" ]]; then
+      # Same prefix, different URL - do not clobber; only note it.
+      echo "fetch.sh: registry already has prefix='$DERIVED_PREFIX' -> '$EXISTING_URL' (not overwritten)" >&2
+    fi
+  fi
+fi
+
 VERSION="$(jq -r '.version' "$INDEX")"
 TITLE="$(jq -r '.title' "$INDEX")"
 PATH_COUNT="$(jq -r '.path_count' "$INDEX")"
@@ -158,6 +230,13 @@ path_count=$PATH_COUNT
 cached=$CACHED
 source_url=$URL
 EOF
+
+# Surface registry-hit info when the URL came from a registry lookup or was
+# auto-registered this run.
+if [[ -n "$REGISTRY_PREFIX" ]]; then
+  echo "registry_matched=true"
+  echo "registry_prefix=$REGISTRY_PREFIX"
+fi
 
 # Surface UI-only fields when they apply, so downstream callers can chain
 # `get.sh --op <operation_id>` without re-parsing the original URL.

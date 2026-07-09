@@ -27,6 +27,10 @@ input URL ──resolve.sh──► json_url (+ group / tag / operationId hints,
                     fetch.sh ──► ~/.cache/swagger-skill/<sha1>.json          (full spec, on disk)
                                  ~/.cache/swagger-skill/<sha1>.index.json    (lightweight: paths + summary + tags + operationId)
                                  ~/.cache/swagger-skill/<sha1>.meta.json     (url, fetched_at)
+                                 ~/.cache/swagger-skill/registry.json        (path-prefix -> swagger URL, auto + manual)
+
+no URL, only an API path?
+  fetch.sh --path /api/order/... ──registry.sh lookup──► url ──► fetch.sh (as above)
 
 list.sh   ──► reads index only                       (cheap browse)
 search.sh ──► reads index only                       (cheap keyword filter)
@@ -56,9 +60,10 @@ bash skills/swagger-explorer/scripts/resolve.sh '<ui-or-json-url>'
 ```bash
 bash skills/swagger-explorer/scripts/fetch.sh <url>          # uses cache if <24h old
 bash skills/swagger-explorer/scripts/fetch.sh <url> --refresh # force re-download
+bash skills/swagger-explorer/scripts/fetch.sh --path <api-path> [--refresh]  # resolve URL via registry
 ```
 
-`<url>` can be either a JSON URL or a Swagger UI URL. Output is line-oriented `key=value` — parse `id=` (the handle for every other command), and when present, `tag=` / `operation_id=` (free hints carried over from a UI URL):
+`<url>` can be either a JSON URL or a Swagger UI URL. When the user only gave an API path (no swagger URL), pass `--path <api-path>` and `fetch.sh` looks up the longest matching path-prefix in the registry (see step 0.5) to recover the URL. Output is line-oriented `key=value` — parse `id=` (the handle for every other command), and when present, `tag=` / `operation_id=` (free hints carried over from a UI URL):
 
 ```
 id=77f356f46eae21d33b4e187f4748f7a31beb1da9
@@ -73,9 +78,27 @@ ui_url=https://.../swagger-ui/index.html?urls.primaryName=auth#/sc-role-controll
 group=auth                     # only when input was a UI URL with urls.primaryName
 tag=sc-role-controller         # only when input URL had a #/<tag>/... fragment
 operation_id=getApionAuthRoleList   # only when input URL had a #/<tag>/<op> fragment
+registry_matched=true               # only when the URL came from a registry lookup
+registry_prefix=/api/...            # only when the URL came from a registry lookup
 ```
 
 Cache: `~/.cache/swagger-skill/` (override with `SWAGGER_SKILL_CACHE`). TTL: 24 h (`SWAGGER_SKILL_TTL`, seconds).
+
+### 1.5. (When no URL was given) Resolve a swagger URL from the registry
+
+If the user provides only an API path (`/api/order/create`) and no swagger URL, `fetch.sh --path <api-path>` looks up the registry for the longest registered prefix that is a prefix of the input path, and uses that entry's URL. The registry is a JSON file at `~/.cache/swagger-skill/registry.json` (same cache dir, override with `SWAGGER_SKILL_CACHE`) mapping path-prefixes to swagger URLs.
+
+Maintain it with `registry.sh`:
+
+```bash
+bash .../registry.sh add    <prefix> <url> [--source manual|auto]  # register/update
+bash .../registry.sh remove <prefix>                                # delete
+bash .../registry.sh list   [--format table|json]                  # show all
+bash .../registry.sh lookup <path-or-prefix>                       # longest-prefix match -> url
+bash .../registry.sh path                                           # print registry.json location
+```
+
+`fetch.sh` also **auto-registers** on a successful fetch: it derives the spec's common path-prefix (longest common prefix of the spec's endpoint paths, truncated to the last `/`) and writes a `source=auto` entry - unless a `manual` entry already exists for that prefix (manual wins, never overwritten). Disable auto-registration with `SWAGGER_SKILL_AUTOREGISTER=0`. Prefixes shorter than 2 path segments (e.g. `/` or `/api`) are skipped to avoid over-broad mappings.
 
 ### 2. Browse or search (index only — always cheap)
 
@@ -151,7 +174,26 @@ op="$(printf '%s\n' "$out" | awk -F= '/^operation_id=/{print $2}')"
 bash .../scripts/get.sh "$id" --op "$op"
 ```
 
-Report back to the user: parameters / request body / responses, in their language, citing the spec URL — **not** a paste of the entire JSON.
+Report back to the user: parameters / request body / responses, in their language, citing the spec URL - **not** a paste of the entire JSON.
+
+### C) User gives only an API path, no swagger URL
+
+User: *"`/api/order/create` 这个接口的入参是什么"*  (no swagger URL provided)
+
+```bash
+# 1. Try to recover a swagger URL from the registry by path prefix.
+#    If a previous fetch already registered /api/order, this hits.
+out="$(bash .../scripts/fetch.sh --path /api/order/create)"
+id="$(printf '%s\n' "$out" | awk -F= '/^id=/{print $2}')"
+
+# 2. If fetch.sh reported "no registry entry matches path", ask the user for
+#    the swagger URL once, then register it so future paths resolve silently:
+#      bash .../scripts/registry.sh add /api/order '<swagger-url>'
+#    (or just fetch by URL once - auto-registration handles it.)
+
+# 3. Pull the endpoint.
+bash .../scripts/get.sh "$id" /api/order/create --method POST
+```
 
 ## Operational notes
 
@@ -161,6 +203,7 @@ Report back to the user: parameters / request body / responses, in their languag
 - **YAML specs / non-JSON sources.** This skill only parses JSON. If a URL serves YAML, convert it first (`yq -o json` → save under the cache id) or ask the user for the JSON variant — most Springfox / SpringDoc / FastAPI endpoints already return JSON.
 - **Authenticated swagger.** `fetch.sh` and `resolve.sh` are plain `curl`. If the spec is behind auth, ask the user to provide a header or a pre-downloaded file path instead of guessing credentials.
 - **Refresh policy.** When the user says "接口好像变了" / "the spec was updated", re-run `fetch.sh --refresh` before answering.
+- **Registry.** `registry.json` maps API path-prefixes to swagger URLs so `fetch.sh --path` can recover a URL when the user only gives an API path. Manual entries (`source=manual`) are never overwritten by auto-registration; if the same prefix points to a different URL after a fetch, fetch.sh logs a stderr note and keeps the manual one. To force an update, `registry.sh remove <prefix>` then re-add, or `registry.sh add` directly (add upserts). The registry is plain JSON - `registry.sh path` prints its location, and hand-editing is supported but `registry.sh` is preferred.
 
 ## References
 

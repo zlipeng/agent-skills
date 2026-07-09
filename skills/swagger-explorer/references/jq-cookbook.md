@@ -107,3 +107,33 @@ jq '.paths["/api/project/add"]' "$FILE"
 ```
 
 Don't paste this output back to the user verbatim — it may include unresolved `$ref`s and irrelevant operations. Prefer `get.sh`.
+
+## Registry (path-prefix -> swagger URL)
+
+The registry lives at `$SWAGGER_SKILL_CACHE/registry.json` (default `~/.cache/swagger-skill/registry.json`). Prefer `registry.sh` for reads/writes; the snippets below are for ad-hoc inspection.
+
+```bash
+REG="${SWAGGER_SKILL_CACHE:-$HOME/.cache/swagger-skill}/registry.json"
+```
+
+List every registered prefix and URL:
+
+```bash
+jq -r '.entries[] | "\(.prefix)\t\(.url)\t\(.source)"' "$REG"
+```
+
+Find which entry a given API path would match (longest prefix wins):
+
+```bash
+jq -r --arg in "/api/order/create" '
+  [.entries[] | select(.prefix as $p | $in | startswith($p))]
+  | sort_by(.prefix) | reverse | .[0]
+  | if . == null then "(no match)" else "\(.prefix) -> \(.url)" end
+' "$REG"
+```
+
+Entries added by `fetch.sh` auto-registration (vs. manual `registry.sh add`):
+
+```bash
+jq '.entries | map(select(.source == "auto"))' "$REG"
+```
