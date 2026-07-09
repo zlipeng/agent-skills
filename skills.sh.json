@@ -16,6 +16,11 @@
       "title": "API",
       "description": "API spec exploration and integration skills.",
       "skills": ["swagger-explorer"]
+    },
+    {
+      "title": "Frontend",
+      "description": "Frontend code investigation and data-source digest skills.",
+      "skills": ["frontend-module-api-digest"]
     }
   ]
 }
