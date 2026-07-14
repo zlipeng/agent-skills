@@ -12,11 +12,14 @@
 # URL via /v3/api-docs/swagger-config or /swagger-resources, and surfaces any
 # tag / operationId hints from the URL fragment in its output.
 #
-# When --path <api-path> is given instead of a URL, fetch.sh looks up the
-# longest registered path-prefix in the registry (registry.sh lookup) and uses
-# that entry's URL. This serves the "user gave only an API path, no swagger
-# URL" case. On a successful fetch, the discovered prefix -> URL mapping is
-# also (re)registered automatically (unless SWAGGER_SKILL_AUTOREGISTER=0).
+# When --path <api-path> is given instead of a URL, fetch.sh resolves it against
+# the registry in two stages: first a whole-path longest-prefix match (for
+# "path-prefix -> URL" entries), then, on a miss, a per-segment match so a
+# "group-name" entry can be hit even when the group sits in a later path segment
+# (e.g. "apion/project/get" -> the "project" entry). This serves the "user gave
+# only an API path, no swagger URL" case. Auto-registration of a derived prefix
+# runs only when a URL was given directly (not via --path), and can be disabled
+# with SWAGGER_SKILL_AUTOREGISTER=0.
 #
 # Output (stdout, one key=value per line — easy for the agent to parse):
 #   id=<sha1>
@@ -56,7 +59,17 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# If no URL was given, try to resolve one from the registry by API path prefix.
+# If no URL was given, resolve one from the registry by API path.
+# Two-stage match (only reached when --path was used; a user-supplied URL skips
+# this entirely):
+#   1) whole-path longest-prefix match — supports traditional
+#      "path-prefix -> URL" entries (e.g. prefix "/api/order").
+#   2) if stage 1 misses, split the path into segments and match each segment
+#      against the registry. This supports "group-name -> URL" entries where the
+#      group sits in a later segment of the path — e.g. "apion/project/get"
+#      resolves via the "project" entry. Segments are tried left-to-right and
+#      the first hit wins (client prefixes like "api"/"apion" are not registered
+#      keys, so the group segment is what actually matches).
 REGISTRY_PREFIX=""
 if [[ -z "$INPUT_URL" ]]; then
   if [[ -z "$REGISTRY_PATH" ]]; then
@@ -64,8 +77,30 @@ if [[ -z "$INPUT_URL" ]]; then
     echo "       fetch.sh --path <api-path> [--refresh]   # resolve URL via registry" >&2
     exit 2
   fi
+
+  reg_matched() { printf '%s\n' "$1" | awk -F= '/^matched=/{print $2}'; }
+
+  # Stage 1: whole-path longest-prefix match.
   LOOKUP_OUT="$(bash "$SCRIPT_DIR/registry.sh" lookup "$REGISTRY_PATH")"
-  MATCHED="$(printf '%s\n' "$LOOKUP_OUT" | awk -F= '/^matched=/{print $2}')"
+  MATCHED="$(reg_matched "$LOOKUP_OUT")"
+
+  # Stage 2: per-segment match. Strip any query string and leading slash, then
+  # walk segments in order. Uses a while-loop over `tr`-split lines instead of a
+  # bash array for portability with the macOS system bash (3.2).
+  if [[ "$MATCHED" != "true" ]]; then
+    seg_path="${REGISTRY_PATH%%\?*}"   # drop ?query if present
+    seg_path="${seg_path#/}"            # drop leading slash
+    while IFS= read -r seg; do
+      [[ -z "$seg" ]] && continue
+      SEG_OUT="$(bash "$SCRIPT_DIR/registry.sh" lookup "$seg")"
+      if [[ "$(reg_matched "$SEG_OUT")" == "true" ]]; then
+        LOOKUP_OUT="$SEG_OUT"
+        MATCHED="true"
+        break
+      fi
+    done < <(printf '%s\n' "$seg_path" | tr '/' '\n')
+  fi
+
   if [[ "$MATCHED" != "true" ]]; then
     echo "fetch.sh: no registry entry matches path '$REGISTRY_PATH'" >&2
     echo "  register one with: registry.sh add <prefix> <swagger-url>" >&2
@@ -185,8 +220,11 @@ jq -n --arg url "$URL" --arg id "$ID" \
 # as the longest common prefix of the spec's endpoint paths, truncated to the
 # last "/". Skip if the prefix is too short (fewer than 2 path segments, e.g.
 # "/" or "/api") to avoid over-broad registrations.
+# Skip auto-registration when the URL itself came from a --path registry lookup:
+# it is already registered, and re-deriving a prefix here would only add noise
+# (e.g. a bogus fragment for services whose first path segment varies).
 AUTOREGISTER="${SWAGGER_SKILL_AUTOREGISTER:-1}"
-if [[ "$AUTOREGISTER" == "1" ]]; then
+if [[ "$AUTOREGISTER" == "1" && -z "$REGISTRY_PATH" ]]; then
   DERIVED_PREFIX="$(jq -r '
     [.endpoints[].path] as $paths
     | (if ($paths | length) == 0 then ""
